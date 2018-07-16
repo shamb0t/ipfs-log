@@ -19,6 +19,7 @@ class Entry {
    */
   static async create (ipfs, entryValidator, id, data, next = [], clock) {
     if (!isDefined(ipfs)) throw IpfsNotDefinedError()
+    if (!isDefined(entryValidator)) throw new Error("Entry validator is null or undefined")
     if (!isDefined(id)) throw new Error('Entry requires an id')
     if (!isDefined(data)) throw new Error('Entry requires data')
     if (!isDefined(next) || !Array.isArray(next)) throw new Error("'next' argument is not an array")
@@ -43,13 +44,9 @@ class Entry {
       clock: new Clock(clockId, clockTime),
     }
 
-    // If entryValidator was passed, sign the entry (=authorize)
-    if (entryValidator) {
-      const signature = await entryValidator.signEntry(entry)
-      entry.key = entryValidator.publicKey
-      entry.sig = signature
-    }
-
+    const signature = await entryValidator.signEntry(entry)
+    entry.key = entryValidator.publicKey
+    entry.sig = signature
     entry.hash = await Entry.toMultihash(ipfs, entry)
 
     return entry
@@ -58,6 +55,7 @@ class Entry {
   static async verify (entry, entryValidator) {
     if (!entry.key) throw new Error("Entry doesn't have a public key")
     if (!entry.sig) throw new Error("Entry doesn't have a signature")
+    if (!entryValidator) throw new Error("Entry validator is null or undefined, cannot verify entry")
     if (!Entry.isEntry(entry)) throw new Error("Not a valid Log entry")
 
     const e = Object.assign({}, {
@@ -87,7 +85,24 @@ class Entry {
     if (!ipfs) throw IpfsNotDefinedError()
     // TODO: These wrap/unwraps we do from object to JSON / data to JSON
     // could be isolated into utils functions so we can reuse it
-    const data = Buffer.from(JSON.stringify(entry))
+    if (!(entry.id && entry.clock && entry.next && entry.payload && (entry.v === 0 || entry.v > 0))) {
+      throw new Error('Invalid entry format')
+    }
+
+    // Ensure `entry` follows the correct format
+    const e = {
+      hash: null,
+      id: entry.id,
+      payload: entry.payload,
+      next: entry.next,
+      v: entry.v,
+      clock: entry.clock,
+    }
+
+    if (entry.sig) Object.assign(e, { sig: entry.sig })
+    if (entry.key) Object.assign(e, { key: entry.key })
+
+    const data = Buffer.from(JSON.stringify(e))
     return ipfs.object.put(data)
       .then((res) => res.toJSON().multihash)
   }
