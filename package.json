@@ -13,6 +13,7 @@
     "node": ">=8.0.0"
   },
   "dependencies": {
+    "ethers": "^3.0.25",
     "p-map": "^1.1.1",
     "p-whilst": "^1.0.0"
   },

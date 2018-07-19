@@ -48,7 +48,7 @@ class Log extends GSet {
    * to be used as a fallback to the clockId
    * @return {Log}                            Log
    */
-  constructor (ipfs, id, entries, heads, clock, validator) {
+  constructor (ipfs, id, entries, heads, clock, validator, identity) {
     // TODO: We have to simplify this constructor and get an "options" object or something like this
     if (!isDefined(ipfs)) {
       throw LogError.ImmutableDBNotDefinedError()
@@ -73,6 +73,7 @@ class Log extends GSet {
 
     // Entry validator
     this._entryValidator = new EntryValidator(validator)
+    this._identity = identity
 
     // Add entries to the internal cache
     entries = entries || []
@@ -216,7 +217,9 @@ class Log extends GSet {
     // Get the required amount of hashes to next entries (as per current state of the log)
     const nexts = Object.keys(this.traverse(this.heads, pointerCount))
     // Create the entry and add it to the internal cache
-    const entry = await Entry.create(this._storage, this._entryValidator, this.id, data, nexts, this.clock)
+
+    if (!this._entryValidator.canAppend(this._identity.id)) throw new Error("Identity.id is not premitted to write")
+    const entry = await Entry.create(this._storage, this._identity, this.id, data, nexts, this.clock)
     this._entryIndex[entry.hash] = entry
     nexts.forEach(e => this._nextsIndex[e] = entry.hash)
     this._headsIndex = {}
@@ -249,7 +252,9 @@ class Log extends GSet {
     const newItems = Log.difference(log, this)
 
     // Verify that all new entries can be joined with this log, throws an error if fails
-    const verify = async (entry) => await Entry.verify(entry, this._entryValidator)
+    const permitted = (entry) => if !(this._entryValidator.canAppend(entry.key.id)) throw new Error("Append not permitted")
+    const verify = async (entry) => await Entry.verify(entry, this._identity)
+    Object.values(newItems).forEach(permitted)
     await pMap(Object.values(newItems), verify, { concurrency: 1 })
 
     // Update the internal entry index

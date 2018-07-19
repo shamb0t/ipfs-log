@@ -17,9 +17,10 @@ class Entry {
    * // { hash: "Qm...Foo", payload: "hello", next: [] }
    * @returns {Promise<Entry>}
    */
-  static async create (ipfs, entryValidator, id, data, next = [], clock) {
+  static async create (ipfs, identity, id, data, next = [], clock) {
     if (!isDefined(ipfs)) throw IpfsNotDefinedError()
-    if (!isDefined(entryValidator)) throw new Error("Entry validator is null or undefined")
+    // if (!isDefined(entryValidator)) throw new Error("Entry validator is null or undefined")
+    if (!isDefined(identity)) throw new Error('Entry requires an identity')
     if (!isDefined(id)) throw new Error('Entry requires an id')
     if (!isDefined(data)) throw new Error('Entry requires data')
     if (!isDefined(next) || !Array.isArray(next)) throw new Error("'next' argument is not an array")
@@ -32,7 +33,7 @@ class Entry {
     // Take the id of the given clock by default,
     // if clock not given, take the signing key if it's a Key instance,
     // or if none given, take the id as the clock id
-    const clockId = clock ? clock.id : (entryValidator ? entryValidator.publicKey : id)
+    const clockId = clock ? clock.id : (identity ? identity.publicKey : id)
     const clockTime = clock ? clock.time : null
 
     let entry = {
@@ -44,22 +45,30 @@ class Entry {
       clock: new Clock(clockId, clockTime),
     }
 
-    const signature = await entryValidator.signEntry(entry)
-    entry.key = entryValidator.publicKey
+    const signature = await identity.provider.sign(identity, Buffer.from(JSON.stringify(entry)))
+    entry.key = { id : identity.id, publicKey: identity.publicKey, signature: identity.signature }
     entry.sig = signature
     entry.hash = await Entry.toMultihash(ipfs, entry)
 
     return entry
   }
 
-  static async verify (entry, entryValidator) {
+  static async verify (entry, identity) {
     if (!entry.key) throw new Error("Entry doesn't have a public key")
     if (!entry.sig) throw new Error("Entry doesn't have a signature")
-    if (!entryValidator) throw new Error("Entry validator is null or undefined, cannot verify entry")
+    // if (!entryValidator) throw new Error("Entry validator is null or undefined, cannot verify entry")
     if (!Entry.isEntry(entry)) throw new Error("Not a valid Log entry")
 
     // Throws an error if verification fails
-    const isValid = await entryValidator.verifyEntrySignature(entry)
+    let e = {
+      hash: null,
+      id: entry.id, // For determining a unique chain
+      payload: entry.payload, // Can be any JSON.stringifyable data
+      next: entry.next, // Array of Multihashes
+      v:entry.v, // For future data structure updates, should currently always be 0
+      clock:entry.clock,
+    }
+    const isValid = await identity.provider.verify(entry.sig, entry.key.publicKey, Buffer.from(JSON.stringify(e)))
     if (!isValid) {
       throw new Error(`Invalid signature on entry: ${entry.hash}`)
     }
