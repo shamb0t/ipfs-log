@@ -2,14 +2,14 @@
 
 const pMap = require('p-map')
 const GSet = require('./g-set')
-const Entry = require('./entry')
+const Entry = require('./entry2')
 const LogIO = require('./log-io')
 const LogError = require('./log-errors')
 const Clock = require('./lamport-clock')
 const isDefined = require('./utils/is-defined')
 const isFunction = require('./utils/is-function')
 const _uniques = require('./utils/uniques')
-const EntryValidator = require('./validator')
+// const EntryValidator = require('./validator')
 
 const randomId = () => new Date().getTime().toString()
 const getHash = e => e.hash
@@ -72,7 +72,7 @@ class Log extends GSet {
     this._id = id || randomId()
 
     // Entry validator
-    this._entryValidator = new EntryValidator(validator)
+    this._entryValidator = validator
     this._identity = identity
 
     // Add entries to the internal cache
@@ -95,7 +95,7 @@ class Log extends GSet {
     // Take the given key as the clock id is it's a Key instance,
     // otherwise if key was given, take whatever it is,
     // and if it was null, take the given id as the clock id
-    const clockId = this._entryValidator ? this._entryValidator.publicKey : this._id
+    const clockId = this._identity ? this._identity.publicKey : this._id
     this._clock = new Clock(clockId, maxTime)
   }
 
@@ -368,13 +368,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromMultihash (ipfs, hash, length = -1, exclude, entryValidator, onProgressCallback) {
+  static fromMultihash (ipfs, hash, length = -1, exclude, entryValidator, identity, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error(`Invalid hash: ${hash}`)
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromMultihash(ipfs, hash, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, data.heads, data.clock, entryValidator))
+      .then((data) => new Log(ipfs, data.id, data.values, data.heads, data.clock, entryValidator, identity))
   }
 
   /**
@@ -385,13 +385,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromEntryHash (ipfs, hash, id, length = -1, exclude, entryValidator, onProgressCallback) {
+  static fromEntryHash (ipfs, hash, id, length = -1, exclude, entryValidator, identity, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error("'hash' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntryHash(ipfs, hash, id, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, id, data.values, null, null, entryValidator))
+      .then((data) => new Log(ipfs, id, data.values, null, null, entryValidator, identity))
   }
 
   /**
@@ -402,12 +402,12 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}      New Log
    */
-  static fromJSON (ipfs, json, length = -1, entryValidator, timeout, onProgressCallback) {
+  static fromJSON (ipfs, json, length = -1, entryValidator, identity, timeout, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromJSON(ipfs, json, length, timeout, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator))
+      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator, identity))
   }
 
   /**
@@ -419,13 +419,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}       New Log
    */
-  static fromEntry (ipfs, sourceEntries, length = -1, exclude, entryValidator, onProgressCallback) {
+  static fromEntry (ipfs, sourceEntries, length = -1, exclude, entryValidator, identity, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(sourceEntries)) throw new Error("'sourceEntries' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntry(ipfs, sourceEntries, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator))
+      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator, identity))
   }
 
   /**

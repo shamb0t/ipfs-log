@@ -8,7 +8,7 @@ class ContractACL {
       throw new Error('load is invalid function')
     }
     if (!isFunction(subscribeEvents)) {
-      throw new Error('canAppend is invalid function')
+      throw new Error('subscribeEvents is invalid function')
     }
     this._capabilities = {}
     this.load = load
@@ -39,7 +39,7 @@ class ContractACL {
   //   return this._publicKey
   // }
 
-  async canAppend(id) {
+   canAppend(id) {
     if (this._capabilities['write'].includes('*'))
         return true
 
