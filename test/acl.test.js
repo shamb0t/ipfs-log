@@ -23,4 +23,10 @@ describe('ACL', function() {
     var permitted = acl.canAppend('badkey')
     assert.equal(permitted, false)
   })
+
+  it('canAppend to public log', () => {
+    assert.equal(acl.canAppend('anykey'), false)
+    acl.add(acl._capabilities, 'write', '*', 'ethAddr')
+    assert.equal(acl.canAppend('anykey'), true)
+  })
 })

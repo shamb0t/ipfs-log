@@ -2,20 +2,11 @@
 
 const assert = require('assert')
 const rmrf = require('rimraf')
-const path = require('path')
-const mkdirp = require('mkdirp')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Entry = require('../src/entry2')
-const EntryValidator = require('../src/validator')
 const getTestEntryValidator = require('./utils/test-entry-validator')
-const Identity = require('../src/identity')
-const IdentityProvider = require('../src/identity-provider')
-const Keystore = require('../src/keystore')
-const LocalStorage = require('node-localstorage').LocalStorage
-const testKeysPath = path.resolve('./test/keystore2')
-const savedKeysPath = path.resolve('./test/fixtures/keystore2')
-const { HDNode, Wallet, SigningKey, utils } = require('ethers')
+const getIdentity = require('./utils/test-entry-identity')
 
 const apis = [require('ipfs')]
 
@@ -27,10 +18,7 @@ const repoConf = {
   },
 }
 
-// const identity = new Identity('id', 'A', 'signature')
-
-// const entryValidator = new EntryValidator(getTestEntryValidator('A'))
-let ipfs, ipfsDaemon, keystore, identityProvider, wallet, id, identity
+let ipfs, ipfsDaemon, identity
 
 apis.forEach((IPFS) => {
 
@@ -58,16 +46,7 @@ apis.forEach((IPFS) => {
 
     describe('create', async () => {
       before (async ()=> {
-        rmrf.sync(testKeysPath)
-        const privateKey = '0x0123456789012345678901234567890123456789012345678901234567890123'
-        const seedphrase = "radar blur cabbage chef fix engine embark joy scheme fiction master release"
-        wallet = new Wallet.fromMnemonic(seedphrase)
-
-        keystore = Keystore(LocalStorage, mkdirp).create(savedKeysPath)
-        identityProvider = new IdentityProvider(keystore)
-        id = wallet.address
-        identity = await identityProvider.create(id, wallet.signMessage.bind(wallet))
-
+        identity = await getIdentity()
       })
 
       it('creates a entry with payload', async () => {

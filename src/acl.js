@@ -17,11 +17,12 @@ class ContractACL {
     this.remove = remove
   }
 
-   canAppend(id) {
-    if (this._capabilities['write'].includes('*'))
+  canAppend(id) {
+    const ids = (this._capabilities['write'] || [])
+    if (ids.includes('*'))
         return true
 
-    if (this._capabilities['write'].includes(id))
+    if (ids.includes(id))
         return true
 
     return false

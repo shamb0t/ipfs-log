@@ -5,18 +5,14 @@ const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 // const MemStore = require('./utils/mem-store')
-const path = require('path')
 const getTestEntryValidator = require('./utils/test-entry-acl')
 const getIdentity = require('./utils/test-entry-identity')
-const EntryValidator = require('../src/acl')
 const LogCreator = require('./utils/log2-creator')
 const bigLogString = require('./fixtures/big-log.fixture.js')
 const Log = require('../src/log2')
 const Entry = require('../src/entry2')
 const Clock = require('../src/lamport-clock')
 const ACL = require('../src/acl')
-
-// const { HDNode, Wallet, SigningKey, utils } = require('ethers')
 
 const apis = [require('ipfs')]
 
