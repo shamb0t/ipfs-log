@@ -57,4 +57,5 @@ class ContractAPI {
       }
     })
   }
+  module.exports = ContractAPI
 }

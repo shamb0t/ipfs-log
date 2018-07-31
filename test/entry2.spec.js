@@ -29,7 +29,7 @@ const repoConf = {
 
 // const identity = new Identity('id', 'A', 'signature')
 
-const entryValidator = new EntryValidator(getTestEntryValidator('A'))
+// const entryValidator = new EntryValidator(getTestEntryValidator('A'))
 let ipfs, ipfsDaemon, keystore, identityProvider, wallet, id, identity
 
 apis.forEach((IPFS) => {
@@ -71,12 +71,12 @@ apis.forEach((IPFS) => {
       })
 
       it('creates a entry with payload', async () => {
-        const expectedHash = 'QmUguHrRnafpv6fCHDD3h9inP3g5EZcKS6K3xQWfoZofa6'
+        const expectedHash = 'QmQEZVRGsBivZoeSW1wXJ7AnKRwogjER7DP6FVxCzhQnTY'
         const payload = 'hello world'
         const entry = await Entry.create(ipfs, identity, 'A', payload)
         assert.equal(entry.payload, payload)
         assert.equal(entry.id, 'A')
-        assert.equal(entry.clock.id, identity.publicKey)
+        assert.equal(entry.clock.id, identity.id)
         // assert.equal(entry.clock.id, 'A')
         assert.equal(entry.clock.time, 0)
         assert.equal(entry.v, 0)
@@ -85,7 +85,7 @@ apis.forEach((IPFS) => {
       })
 
       it('creates a entry with payload and next', async () => {
-        const expectedHash = 'QmQKkFEWHs8HYQJQUYM26zxmQSApbRkjmykSHjWX81z7Ec'
+        const expectedHash = 'QmPRA5z2vkmqHpgUPrqJq225EcuufUYAAB9yWuVqDroMDr'
         const payload1 = 'hello world'
         const payload2 = 'hello again'
         const entry1 = await Entry.create(ipfs, identity, 'A', payload1)
@@ -94,7 +94,7 @@ apis.forEach((IPFS) => {
         assert.equal(entry2.payload, payload2)
         assert.equal(entry2.next.length, 1)
         assert.equal(entry2.hash, expectedHash)
-        assert.equal(entry2.clock.id, identity.publicKey)
+        assert.equal(entry2.clock.id, identity.id)
         assert.equal(entry2.clock.time, 1)
       })
 
@@ -167,7 +167,7 @@ apis.forEach((IPFS) => {
 
     describe('toMultihash', () => {
       it('returns an ipfs hash', async () => {
-        const expectedHash = 'QmXaXnVt6GHgz4gKUdhSMLk79CY9yDoN6AFnSE6hUEniE2'
+        const expectedHash = 'QmV3Ykw5V8iQXjBkBEtZ7DgWsRQwAHL7YNbpFaVaFP6WRd'
         const entry = await Entry.create(ipfs, identity, 'A', 'hello')
         const hash = await Entry.toMultihash(ipfs, entry)
         assert.equal(entry.hash, expectedHash)
@@ -185,7 +185,7 @@ apis.forEach((IPFS) => {
 
     describe('fromMultihash', () => {
       it('creates a entry from ipfs hash', async () => {
-        const expectedHash = 'QmbYoLD5qHGH6tThJ8zgB9J8JHtSJzpxAx3QNxQN5Yxe3C'
+        const expectedHash = 'QmQ5aCygANyjRQwAKWcdS2TpQiVLVhmzt5JsNKA8QKuzg9'
         const payload1 = 'hello world'
         const payload2 = 'hello again'
         const entry1 = await Entry.create(ipfs, identity, 'A', payload1)

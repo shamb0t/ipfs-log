@@ -4,15 +4,16 @@ const getTestACL = require('./utils/test-entry-acl')
 
 describe('ACL', function() {
   let acl
-  before (() => {
-    acl = getTestACL()
+  beforeEach (() => {
+    acl = new ACL(getTestACL())
+    // acl.subscribeEvents(acl._capabilities)
   })
 
   it('creates an acl', () => {
     // IPFS PeerID
     // Ethereum wallet address
     // etc.
-    assert.deepEqual(acl._capabilities, { write: ['0xaC39b311DCEb2A4b2f5d8461c1cdaF756F4F7Ae']})
+    assert.deepEqual(acl._capabilities, { write: ['0xaC39b311DCEb2A4b2f5d8461c1cdaF756F4F7Ae9']})
   })
 
   it('adds capability', () => {

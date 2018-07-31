@@ -95,7 +95,7 @@ class Log extends GSet {
     // Take the given key as the clock id is it's a Key instance,
     // otherwise if key was given, take whatever it is,
     // and if it was null, take the given id as the clock id
-    const clockId = this._identity ? this._identity.publicKey : this._id
+    const clockId = this._identity ? this._identity.id : this._id
     this._clock = new Clock(clockId, maxTime)
   }
 
@@ -252,7 +252,7 @@ class Log extends GSet {
     const newItems = Log.difference(log, this)
 
     // Verify that all new entries can be joined with this log, throws an error if fails
-    const permitted = (entry) =>  { if (!this._entryValidator.canAppend(entry.key.id)) throw new Error("Append not permitted") }
+    const permitted = (entry) =>  { if (  !this._entryValidator.canAppend(entry.key.id)) throw new Error("Append not permitted") }
     const verify = async (entry) => await Entry.verify(entry, this._identity)
     Object.values(newItems).forEach(permitted)
     await pMap(Object.values(newItems), verify, { concurrency: 1 })

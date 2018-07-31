@@ -33,7 +33,7 @@ class Entry {
     // Take the id of the given clock by default,
     // if clock not given, take the signing key if it's a Key instance,
     // or if none given, take the id as the clock id
-    const clockId = clock ? clock.id : (identity ? identity.publicKey : id)
+    const clockId = clock ? clock.id : (identity ? identity.id : id)
     const clockTime = clock ? clock.time : null
 
     let entry = {
