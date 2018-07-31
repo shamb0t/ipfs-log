@@ -218,8 +218,13 @@ class Log extends GSet {
     const nexts = Object.keys(this.traverse(this.heads, pointerCount))
     // Create the entry and add it to the internal cache
 
-    if (!this._entryValidator.canAppend(this._identity.id)) throw new Error("Identity.id is not premitted to write")
-    const entry = await Entry.create(this._storage, this._identity, this.id, data, nexts, this.clock)
+    if (!this._entryValidator.canAppend(this._identity.id))
+      throw new Error("Identity.id is not permitted to write")
+    let entry = await Entry.create(this.id, data, nexts, this.clock)
+    entry.sig = await this._identity.provider.sign(this._identity, Buffer.from(JSON.stringify(entry)))
+    entry.key = { id : this._identity.id, publicKey: this._identity.publicKey, signature: this._identity.signature }
+    // entry.sig = signature
+    entry.hash = await Entry.toMultihash(this._storage, entry)
     this._entryIndex[entry.hash] = entry
     nexts.forEach(e => this._nextsIndex[e] = entry.hash)
     this._headsIndex = {}
@@ -252,8 +257,8 @@ class Log extends GSet {
     const newItems = Log.difference(log, this)
 
     // Verify that all new entries can be joined with this log, throws an error if fails
-    const permitted = (entry) =>  { if (  !this._entryValidator.canAppend(entry.key.id)) throw new Error("Append not permitted") }
-    const verify = async (entry) => await Entry.verify(entry, this._identity)
+    const permitted = (entry) =>  { if (!this._entryValidator.canAppend(entry.key.id)) throw new Error("Append not permitted") }
+    const verify = async (entry) => await Log.verify(entry, this._identity)
     Object.values(newItems).forEach(permitted)
     await pMap(Object.values(newItems), verify, { concurrency: 1 })
 
@@ -543,6 +548,27 @@ class Log extends GSet {
       }
     }
     return res
+  }
+
+  static async verify (entry, identity) {
+    if (!entry.key) throw new Error("Entry doesn't have a public key")
+    if (!entry.sig) throw new Error("Entry doesn't have a signature")
+    if (!Entry.isEntry(entry)) throw new Error("Not a valid Log entry")
+
+    // Throws an error if verification fails
+    let e = {
+      hash: null,
+      id: entry.id, // For determining a unique chain
+      payload: entry.payload, // Can be any JSON.stringifyable data
+      next: entry.next, // Array of Multihashes
+      v:entry.v, // For future data structure updates, should currently always be 0
+      clock:entry.clock,
+    }
+    const isValid = await identity.provider.verify(entry.sig, entry.key.publicKey, Buffer.from(JSON.stringify(e)))
+    if (!isValid) {
+      throw new Error(`Invalid signature on entry: ${entry.hash}`)
+    }
+    return true
   }
 }
 
