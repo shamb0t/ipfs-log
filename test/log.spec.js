@@ -5,13 +5,15 @@ const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 // const MemStore = require('./utils/mem-store')
-const getTestEntryValidator = require('./utils/test-entry-validator')
-const EntryValidator = require('../src/validator')
+const getTestEntryValidator = require('./utils/test-entry-acl')
+const getIdentity = require('./utils/test-entry-identity')
 const LogCreator = require('./utils/log-creator')
 const bigLogString = require('./fixtures/big-log.fixture.js')
 const Log = require('../src/log')
 const Entry = require('../src/entry')
 const Clock = require('../src/lamport-clock')
+const ACL = require('../src/acl')
+const createAndPublishEntry = require('./utils/test-entry-create-publish')
 
 const apis = [require('ipfs')]
 
@@ -23,23 +25,25 @@ const repoConf = {
   },
 }
 
-let ipfs
+let ipfs, ipfsDaemon
 
 const last = (arr) => {
   return arr[arr.length - 1]
 }
 
 apis.forEach((IPFS) => {
-  const testEntryValidator = getTestEntryValidator()
-  const entryValidator = new EntryValidator(testEntryValidator)
-  const testEntryValidator1 = getTestEntryValidator('A')
-  const testEntryValidator2 = getTestEntryValidator('B')
-  const testEntryValidator3 = getTestEntryValidator('C')
-  const testEntryValidator4 = getTestEntryValidator('D')
+  const testEntryValidator = new ACL(getTestEntryValidator())
+  const entryValidator = new ACL(getTestEntryValidator())
+  entryValidator.add(entryValidator._capabilities, 'write', '*', 'ethaddres')
+  testEntryValidator.add(testEntryValidator._capabilities, 'write', '*', 'ethaddres')
+  // const testEntryValidator1 = getTestEntryValidator()
+  // const testEntryValidator2 = getTestEntryValidator()
+  // const testEntryValidator3 = getTestEntryValidator()
+  // const testEntryValidator4 = getTestEntryValidator()
 
   describe('Log', function() {
+    let identity, identity2, identity3, identity4
     this.timeout(20000)
-
     before((done) => {
       rmrf.sync(dataDir)
       ipfs = new IPFS({
@@ -60,6 +64,13 @@ apis.forEach((IPFS) => {
       ipfs.on('ready', () => done())
     })
 
+    beforeEach( async () => {
+        identity = await getIdentity()
+        identity2 = await getIdentity('B')
+        identity3 = await getIdentity('C')
+        identity4 = await getIdentity('D')
+    })
+
     after(async () => {
       if (ipfs)
         await ipfs.stop()
@@ -67,7 +78,7 @@ apis.forEach((IPFS) => {
 
     describe('constructor', async () => {
       it('creates an empty log with default params', () => {
-        const log = new Log(ipfs, null, null, null, null, testEntryValidator)
+        const log = new Log(ipfs, null, null, null, null, entryValidator, identity)
         assert.notEqual(log._entryIndex, null)
         assert.notEqual(log._headsIndex, null)
         assert.notEqual(log._id, null)
@@ -93,26 +104,26 @@ apis.forEach((IPFS) => {
       })
 
       it('sets an id', () => {
-        const log = new Log(ipfs, 'ABC', null, null, null, testEntryValidator)
+        const log = new Log(ipfs, 'ABC', null, null, null, entryValidator)
         assert.equal(log.id, 'ABC')
       })
 
       it('sets the clock id', () => {
-        const log = new Log(ipfs, 'ABC', null, null, null, getTestEntryValidator('XXX'))
+        const log = new Log(ipfs, 'ABC', null, null, null,entryValidator, identity)
         assert.equal(log.id, 'ABC')
-        assert.equal(log.clock.id, 'XXX')
+        assert.equal(log.clock.id, identity.id)
       })
 
       it('generates id string if id is not passed as an argument', () => {
-        const log = new Log(ipfs, null, null, null, null, testEntryValidator)
+        const log = new Log(ipfs, null, null, null, null, entryValidator, identity)
         assert.equal(typeof log.id === 'string', true)
       })
 
       it('sets items if given as params', async () => {
-        const one = await Entry.create(ipfs, entryValidator, 'A', 'entryA', [], new Clock('A', 0))
-        const two = await Entry.create(ipfs, entryValidator, 'A', 'entryB', [], new Clock('B', 0))
-        const three = await Entry.create(ipfs, entryValidator, 'A', 'entryC', [], new Clock('C', 0))
-        const log = new Log(ipfs, 'A', [one, two, three], null, null, testEntryValidator)
+        const one = await createAndPublishEntry(ipfs, identity, 'A', 'entryA', [], new Clock('A', 0))
+        const two = await createAndPublishEntry(ipfs, identity, 'A', 'entryB', [], new Clock('B', 0))
+        const three = await createAndPublishEntry(ipfs, identity, 'A', 'entryC', [], new Clock('C', 0))
+        const log = new Log(ipfs, 'A', [one, two, three], null, null, entryValidator, identity)
         assert.equal(log.length, 3)
         assert.equal(log.values[0].payload, 'entryA')
         assert.equal(log.values[1].payload, 'entryB')
@@ -120,19 +131,19 @@ apis.forEach((IPFS) => {
       })
 
       it('sets heads if given as params', async () => {
-        const one = await Entry.create(ipfs, entryValidator, 'A', 'entryA')
-        const two = await Entry.create(ipfs, entryValidator, 'B', 'entryB')
-        const three = await Entry.create(ipfs, entryValidator, 'C', 'entryC')
-        const log = new Log(ipfs, 'B', [one, two, three], [three], null, testEntryValidator)
+        const one = await createAndPublishEntry(ipfs, identity, 'A', 'entryA')
+        const two = await createAndPublishEntry(ipfs, identity, 'B', 'entryB')
+        const three = await createAndPublishEntry(ipfs, identity, 'C', 'entryC')
+        const log = new Log(ipfs, 'B', [one, two, three], [three], null, entryValidator, identity)
         assert.equal(log.heads.length, 1)
         assert.equal(log.heads[0].hash, three.hash)
       })
 
       it('finds heads if heads not given as params', async () => {
-        const one = await Entry.create(ipfs, entryValidator, 'A', 'entryA')
-        const two = await Entry.create(ipfs, entryValidator, 'B', 'entryB')
-        const three = await Entry.create(ipfs, entryValidator, 'C', 'entryC')
-        const log = new Log(ipfs, 'A', [one, two, three], null, null, testEntryValidator)
+        const one = await createAndPublishEntry(ipfs, identity, 'A', 'entryA')
+        const two = await createAndPublishEntry(ipfs, identity, 'B', 'entryB')
+        const three = await createAndPublishEntry(ipfs, identity, 'C', 'entryC')
+        const log = new Log(ipfs, 'A', [one, two, three], null, null, entryValidator, identity)
         assert.equal(log.heads.length, 3)
         assert.equal(log.heads[0].hash, one.hash)
         assert.equal(log.heads[1].hash, two.hash)
@@ -178,7 +189,7 @@ apis.forEach((IPFS) => {
       const expectedData = 'five\n└─four\n  └─three\n    └─two\n      └─one'
 
       beforeEach(async () => {
-        log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        log = new Log(ipfs, 'A', null, null, null, entryValidator, identity)
         await log.append('one')
         await log.append('two')
         await log.append('three')
@@ -193,23 +204,37 @@ apis.forEach((IPFS) => {
 
     describe('get', async () => {
       let log
-
-      const expectedData = {
-        hash: 'QmUytjznqAreiGcJVFsbTLYkmjBpfXnDFKZJdj787k1txm',
-        id: 'AAA',
-        payload: 'one',
-        next: [],
-        v: 0,
-        clock: {
-          id: 'key',
-          time: 1,
-        },
-        key: 'key',
-        sig: 'deadbeef'
-      }
+      let expectedData
+      // const expectedData = {
+      //   hash: 'QmcuTKYL62EK8qdt8h5PHbSsmUDBpZ3WjxVNXByZd7M8CP',
+      //   id: 'AAA',
+      //   payload: 'one',
+      //   next: [],
+      //   v: 0,
+      //   clock: {
+      //     id: '04a2a4c71ef3c6f3d3d4b1bd805522ee732183fe731390bea18eb4af0738cd6927b71a1430cf6073164f318001870830292f99a2df795d88921dca1e414a49e8c7',
+      //     time: 1,
+      //   },
+      //   key: identity,
+      //   sig: '3045022100dbf74da70295b19fa3ce506f72769df8d8b3b7fa9ec3c8f476c1105f6e1c282702203c25ab1d0427093513255a2bcc98b6ec15e42497d13b9f99e098f6a4ee2f3353'
+      // }
 
       beforeEach(async () => {
-        log = new Log(ipfs, 'AAA', null, null, null, testEntryValidator)
+        expectedData = {
+          hash: 'QmPTrye7CN6avpBqfiz3CskHqBmWbbmygqJdzY1dFWUutW',
+          id: 'AAA',
+          payload: 'one',
+          next: [],
+          v: 0,
+          clock: {
+            id: '0xaC39b311DCEb2A4b2f5d8461c1cdaF756F4F7Ae9',
+            time: 1,
+              },
+              key: { id: identity.id, publicKey: identity.publicKey, signature: identity.signature },
+              sig: '3045022100dbf74da70295b19fa3ce506f72769df8d8b3b7fa9ec3c8f476c1105f6e1c282702203c25ab1d0427093513255a2bcc98b6ec15e42497d13b9f99e098f6a4ee2f3353'
+            }
+
+        log = new Log(ipfs, 'AAA', null, null, null, entryValidator, identity)
         await log.append('one')
       })
 
@@ -227,7 +252,8 @@ apis.forEach((IPFS) => {
     describe('has', async () => {
       let log
 
-      const expectedData = {
+      // let wallet, wallet2, keystore, identityProvider, id, identity, identity2
+      let expectedData = {
         hash: 'QmUytjznqAreiGcJVFsbTLYkmjBpfXnDFKZJdj787k1txm',
         id: 'AAA',
         payload: 'one',
@@ -242,11 +268,28 @@ apis.forEach((IPFS) => {
       }
 
       beforeEach(async () => {
-        log = new Log(ipfs, 'AAA', null, null, null, testEntryValidator)
+        // entryValidator.add(entryValidator._capabilities,'write', identity.id, 'ethaddres')
+        expectedData = {
+          hash: 'QmPTrye7CN6avpBqfiz3CskHqBmWbbmygqJdzY1dFWUutW',
+          // hash: 'QmP5uTwAHXT1nL1sSVGgFRy38YBg5H6NrZTBy6YBJn1A9D',
+          id: 'AAA',
+          payload: 'one',
+          next: [],
+          v: 0,
+          clock: {
+            // id: '04a2a4c71ef3c6f3d3d4b1bd805522ee732183fe731390bea18eb4af0738cd6927b71a1430cf6073164f318001870830292f99a2df795d88921dca1e414a49e8c7',
+            id: identity.id,
+            time: 1,
+          },
+          key: { id: identity.id, publicKey: identity.publicKey, signature: identity.signature },
+          sig: '3045022100dbf74da70295b19fa3ce506f72769df8d8b3b7fa9ec3c8f476c1105f6e1c282702203c25ab1d0427093513255a2bcc98b6ec15e42497d13b9f99e098f6a4ee2f3353'
+        }
+        log = new Log(ipfs, 'AAA', null, null, null, entryValidator, identity)
         await log.append('one')
       })
 
       it('returns true if it has an Entry', () => {
+        // console.log("HASH: ", log)
         assert.equal(log.has(expectedData), true)
       })
 
@@ -261,13 +304,14 @@ apis.forEach((IPFS) => {
 
     describe('serialize', async () => {
       let log
+
       const expectedData = {
         id: 'AAA',
-        heads: ['QmUFPf2x511CgyejuBCGGKufeJQK3TTtkyyVF1FV7m3H2q']
+        heads: ['QmSWf2wqesJWhjihDWq4pKPv7cRapj89Ntsvav7F677rMm']
       }
 
       beforeEach(async () => {
-        log = new Log(ipfs, 'AAA', null, null, null, testEntryValidator)
+        log = new Log(ipfs, 'AAA', null, null, null, entryValidator, identity)
         await log.append('one')
         await log.append('two')
         await log.append('three')
@@ -282,11 +326,11 @@ apis.forEach((IPFS) => {
       describe('toSnapshot', () => {
         const expectedData = {
           id: 'AAA',
-          heads: ['QmUFPf2x511CgyejuBCGGKufeJQK3TTtkyyVF1FV7m3H2q'],
+          heads: ['QmSWf2wqesJWhjihDWq4pKPv7cRapj89Ntsvav7F677rMm'],
           values: [
-            'QmUytjznqAreiGcJVFsbTLYkmjBpfXnDFKZJdj787k1txm',
-            'QmVeKbaQS7ptbH5KZJcxzrMbrFiyrnt9vzsG82supnVajA',
-            'QmUFPf2x511CgyejuBCGGKufeJQK3TTtkyyVF1FV7m3H2q',
+            'QmPTrye7CN6avpBqfiz3CskHqBmWbbmygqJdzY1dFWUutW',
+            'QmTjxbk9QZ5HToETAEqis26WtvXk2rycQaUqjGi8WXWyv7',
+            'QmSWf2wqesJWhjihDWq4pKPv7cRapj89Ntsvav7F677rMm',
           ]
         }
 
@@ -310,8 +354,8 @@ apis.forEach((IPFS) => {
 
       describe('toMultihash', async () => {
         it('returns the log as ipfs hash', async () => {
-          const expectedHash = 'QmYxf26TE94WRxgQJo52d5RL7ZankJxULEtgXx6vcXZmTv'
-          let log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          const expectedHash = 'QmfBjmyRnZ4Q3wQHa8uhgfHhY9aRbkaP9gcfmCf2qKHJZ5'
+          let log = new Log(ipfs, 'A', null, null, null, entryValidator, identity)
           await log.append('one')
           const hash = await log.toMultihash()
           assert.equal(hash, expectedHash)
@@ -320,10 +364,10 @@ apis.forEach((IPFS) => {
         it('log serialized to ipfs contains the correct data', async () => {
           const expectedData = {
             id: 'A',
-            heads: ['Qme3ZeM9a67DZxQydQ3ioaNBUfXXdBMjhxP1uTexzd7NyK']
+            heads: ['Qmdg8U98cXx3WQKukkUGbGxCXchpg591TAaQp4owbYgJFs']
           }
-          const expectedHash = 'QmYxf26TE94WRxgQJo52d5RL7ZankJxULEtgXx6vcXZmTv'
-          let log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          const expectedHash = 'QmfBjmyRnZ4Q3wQHa8uhgfHhY9aRbkaP9gcfmCf2qKHJZ5'
+          let log = new Log(ipfs, 'A', null, null, null, entryValidator, identity)
           await log.append('one')
           const hash = await log.toMultihash()
           assert.equal(hash, expectedHash)
@@ -334,7 +378,7 @@ apis.forEach((IPFS) => {
         })
 
         it('throws an error if log items is empty', () => {
-          const emptyLog = new Log(ipfs, null, null, null, null, testEntryValidator)
+          const emptyLog = new Log(ipfs, null, null, null, null, entryValidator, identity)
           let err
           try {
             emptyLog.toMultihash()
@@ -345,29 +389,29 @@ apis.forEach((IPFS) => {
           assert.equal(err.message, 'Can\'t serialize an empty log')
         })
       })
-
+    //
       describe('fromMultihash', async () => {
         it('creates a log from ipfs hash - one entry', async () => {
           const expectedData = {
             id: 'X',
-            heads: ['QmdqDqpA4nwDBxPCthALHPyzDnMTx7aCteNndUwANFbWVH']
+            heads: ['QmaYgkB58L8zgVY65TcQgQjri5Xh6TJ9nJ3dJXtN7gYSKV']
           }
-          let log = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
+          let log = new Log(ipfs, 'X', null, null, null, entryValidator, identity)
           await log.append('one')
           const hash = await log.toMultihash()
           // fromMultihash length = -1
-          const res = await Log.fromMultihash(ipfs, hash, -1, null, testEntryValidator1)
+          const res = await Log.fromMultihash(ipfs, hash, -1, null, entryValidator, identity)
           assert.equal(JSON.stringify(res.toJSON()), JSON.stringify(expectedData))
           assert.equal(res.length, 1)
           assert.equal(res.values[0].payload, 'one')
-          assert.equal(res.values[0].clock.id, 'A')
+          assert.equal(res.values[0].clock.id, identity.id)
           assert.equal(res.values[0].clock.time, 1)
         })
 
         it('creates a log from ipfs hash - three entries', async () => {
           const hash = await log.toMultihash()
           // fromMultihash length = -1
-          const res = await Log.fromMultihash(ipfs, hash, -1, null, testEntryValidator1)
+          const res = await Log.fromMultihash(ipfs, hash, -1, null, entryValidator, identity)
           assert.equal(res.length, 3)
           assert.equal(res.values[0].payload, 'one')
           assert.equal(res.values[0].clock.time, 1)
@@ -380,7 +424,7 @@ apis.forEach((IPFS) => {
         it('has the right sequence number after creation and appending', async () => {
           const hash = await log.toMultihash()
           // fromMultihash length = -1
-          let res = await Log.fromMultihash(ipfs, hash, -1, null, testEntryValidator)
+          let res = await Log.fromMultihash(ipfs, hash, -1, null, entryValidator, identity)
           assert.equal(res.length, 3)
           await res.append('four')
           assert.equal(res.length, 4)
@@ -389,9 +433,9 @@ apis.forEach((IPFS) => {
         })
 
         it('creates a log from ipfs hash that has three heads', async () => {
-          let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-          let log2 = new Log(ipfs, 'B', null, null, null, testEntryValidator2)
-          let log3 = new Log(ipfs, 'C', null, null, null, testEntryValidator3)
+          let log1 = new Log(ipfs, 'A', null, null, null, entryValidator, identity)
+          let log2 = new Log(ipfs, 'B', null, null, null, entryValidator, identity)
+          let log3 = new Log(ipfs, 'C', null, null, null, entryValidator, identity)
           await log1.append('one')
           await log2.append('two')
           await log3.append('three')
@@ -399,34 +443,34 @@ apis.forEach((IPFS) => {
           await log1.join(log3)
           const hash = await log1.toMultihash()
           // fromMultihash length = -1
-          const res = await Log.fromMultihash(ipfs, hash, -1, null, testEntryValidator)
+          const res = await Log.fromMultihash(ipfs, hash, -1, null, entryValidator, identity)
           assert.equal(res.length, 3)
           assert.equal(res.heads.length, 3)
-          assert.equal(res.heads[0].payload, 'one')
+          assert.equal(res.heads[0].payload, 'three')
           assert.equal(res.heads[1].payload, 'two')
-          assert.equal(res.heads[2].payload, 'three')
+          assert.equal(res.heads[2].payload, 'one')
         })
 
         it('creates a log from ipfs hash up to a size limit', async () => {
           const amount = 100
           const size = amount / 2
-          let log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          let log = new Log(ipfs, 'A', null, null, null, entryValidator,identity)
           for (let i = 0; i < amount; i ++) {
             await log.append(i.toString())
           }
           const hash = await log.toMultihash()
-          const res = await Log.fromMultihash(ipfs, hash, size, null, testEntryValidator)
+          const res = await Log.fromMultihash(ipfs, hash, size, null, entryValidator, identity)
           assert.equal(res.length, size)
         })
 
         it('creates a log from ipfs hash up without size limit', async () => {
           const amount = 100
-          let log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          let log = new Log(ipfs, 'A', null, null, null, entryValidator, identity)
           for (let i = 0; i < amount; i ++) {
             await log.append(i.toString())
           }
           const hash = await log.toMultihash()
-          const res = await Log.fromMultihash(ipfs, hash, -1, null, testEntryValidator)
+          const res = await Log.fromMultihash(ipfs, hash, -1, null, entryValidator, identity)
           assert.equal(res.length, amount)
         })
 
@@ -469,7 +513,7 @@ apis.forEach((IPFS) => {
           // const res = await ipfs.put(Buffer.from('hello'))
           const res = await ipfs.object.put(Buffer.from('hello'))
           try {
-            await Log.fromMultihash(ipfs, res.toJSON().multihash)
+            await Log.fromMultihash(ipfs, res.toJSON().multihash, identity)
           } catch(e) {
             err = e
           }
@@ -478,7 +522,7 @@ apis.forEach((IPFS) => {
 
         it('onProgress callback is fired for each entry', async () => {
           const amount = 100
-          let log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          let log = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
           for (let i = 0; i < amount; i ++) {
             await log.append(i.toString())
           }
@@ -496,7 +540,7 @@ apis.forEach((IPFS) => {
 
           try {
             const hash = await log.toMultihash()
-            const res = await Log.fromMultihash(ipfs, hash, -1, [], testEntryValidator, callback)
+            const res = await Log.fromMultihash(ipfs, hash, -1, [], testEntryValidator, identity, callback)
           } catch (e) {
             throw e
           }
@@ -506,7 +550,7 @@ apis.forEach((IPFS) => {
 
     describe('values', () => {
       it('returns all entries in the log', async () => {
-        let log = new Log(ipfs, null, null, null, null, testEntryValidator)
+        let log = new Log(ipfs, null, null, null, null, testEntryValidator, identity)
         assert.equal(log.values instanceof Array, true)
         assert.equal(log.length, 0)
         await log.append('hello1')
@@ -519,13 +563,13 @@ apis.forEach((IPFS) => {
         assert.equal(log.values[2].payload, 'hello3')
       })
     })
-
+    //
     describe('append', () => {
       describe('append one', async () => {
         let log
 
         before(async () => {
-          log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          log = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
           await log.append("hello1")
         })
 
@@ -553,7 +597,7 @@ apis.forEach((IPFS) => {
 
         it('updated the clocks correctly', async () => {
           log.values.forEach((entry) => {
-            assert.equal(entry.clock.id, 'A')
+            assert.equal(entry.clock.id, identity.id)
             assert.equal(entry.clock.time, 1)
           })
         })
@@ -566,7 +610,7 @@ apis.forEach((IPFS) => {
         let log
 
         before(async () => {
-          log = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+          log = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
           for(let i = 0; i < amount; i ++) {
             await log.append("hello" + i, nextPointerAmount)
             // Make sure the log has the right heads after each append
@@ -589,7 +633,7 @@ apis.forEach((IPFS) => {
         it('updated the clocks correctly', async () => {
           log.values.forEach((entry, index) => {
             assert.equal(entry.clock.time, index + 1)
-            assert.equal(entry.clock.id, 'A')
+            assert.equal(entry.clock.id, identity.id)
           })
         })
 
@@ -605,10 +649,10 @@ apis.forEach((IPFS) => {
       let log1, log2, log3, log4
 
       beforeEach(async () => {
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
-        log4 = new Log(ipfs, 'X', null, null, null, testEntryValidator4)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
+        log4 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity4)
       })
 
       it('joins logs', async () => {
@@ -620,16 +664,16 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, entryValidator, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, entryValidator, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, entryValidator, 'X', 'entryC' + i, [prev3, n1, n2])
+          const n1 = await createAndPublishEntry(ipfs, identity, 'X', 'entryA' + i, [prev1])
+          const n2 = await createAndPublishEntry(ipfs, identity, 'X', 'entryB' + i, [prev2, n1])
+          const n3 = await createAndPublishEntry(ipfs, identity, 'X', 'entryC' + i, [prev3, n1, n2])
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
         }
 
-        const logA = await Log.fromEntry(ipfs, last(items2), -1, null, testEntryValidator1)
-        const logB = await Log.fromEntry(ipfs, last(items3), -1, null, testEntryValidator1)
+        const logA = await Log.fromEntry(ipfs, last(items2), -1, null, testEntryValidator, identity)
+        const logB = await Log.fromEntry(ipfs, last(items3), -1, null, testEntryValidator, identity2)
         assert.equal(logA.length, items2.length + items1.length)
         assert.equal(logB.length, items3.length + items2.length + items1.length)
 
@@ -690,8 +734,8 @@ apis.forEach((IPFS) => {
         await log1.append('helloA2')
         await log2.append('helloB1')
         await log2.append('helloB2')
-        await log1.join(log2)
         await log2.join(log1)
+        await log1.join(log2)
 
 
         const expectedData = [
@@ -793,14 +837,14 @@ apis.forEach((IPFS) => {
         await log1.append('helloA2')
         await log2.append('helloB2')
 
-        assert.equal(log1.clock.id, 'A')
-        assert.equal(log2.clock.id, 'B')
+        assert.equal(log1.clock.id, identity.id)
+        assert.equal(log2.clock.id, identity2.id)
         assert.equal(log1.clock.time, 2)
         assert.equal(log2.clock.time, 2)
 
         await log3.join(log1)
         assert.equal(log3.id, 'X')
-        assert.equal(log3.clock.id, 'C')
+        assert.equal(log3.clock.id, identity3.id)
         assert.equal(log3.clock.time, 2)
 
         await log3.append('helloC1')
@@ -820,27 +864,46 @@ apis.forEach((IPFS) => {
         await log4.append('helloD5')
         await log1.append('helloA5')
         await log4.join(log1)
-        assert.deepEqual(log4.clock.id, 'D')
+        assert.deepEqual(log4.clock.id, identity4.id)
         assert.deepEqual(log4.clock.time, 7)
 
         await log4.append('helloD6')
         assert.deepEqual(log4.clock.time, 8)
+        // console.log(identity.publicKey) //D
+        // console.log(identity2.publicKey) //A
+        // console.log(identity3.publicKey) //B
+        // console.log(identity4.publicKey) //C
 
         const expectedData = [
-          { payload: 'helloA1', id: 'X', clock: { id: 'A', time: 1} },
-          { payload: 'helloB1', id: 'X', clock: { id: 'B', time: 1} },
-          { payload: 'helloD1', id: 'X', clock: { id: 'D', time: 1} },
-          { payload: 'helloA2', id: 'X', clock: { id: 'A', time: 2} },
-          { payload: 'helloB2', id: 'X', clock: { id: 'B', time: 2} },
-          { payload: 'helloD2', id: 'X', clock: { id: 'D', time: 2} },
-          { payload: 'helloC1', id: 'X', clock: { id: 'C', time: 3} },
-          { payload: 'helloC2', id: 'X', clock: { id: 'C', time: 4} },
-          { payload: 'helloD3', id: 'X', clock: { id: 'D', time: 5} },
-          { payload: 'helloD4', id: 'X', clock: { id: 'D', time: 6} },
-          { payload: 'helloA5', id: 'X', clock: { id: 'A', time: 7} },
-          { payload: 'helloD5', id: 'X', clock: { id: 'D', time: 7} },
-          { payload: 'helloD6', id: 'X', clock: { id: 'D', time: 8} },
+          { payload: 'helloA1', id: 'X', clock: { id: identity.id, time: 1} },
+          { payload: 'helloB1', id: 'X', clock: { id: identity2.id, time: 1} },
+          { payload: 'helloD1', id: 'X', clock: { id: identity4.id , time: 1} },
+          { payload: 'helloA2', id: 'X', clock: { id: identity.id, time: 2} },
+          { payload: 'helloB2', id: 'X', clock: { id: identity2.id, time: 2} },
+          { payload: 'helloD2', id: 'X', clock: { id: identity4.id, time: 2} },
+          { payload: 'helloC1', id: 'X', clock: { id: identity3.id, time: 3} },
+          { payload: 'helloC2', id: 'X', clock: { id: identity3.id, time: 4} },
+          { payload: 'helloD3', id: 'X', clock: { id: identity4.id, time: 5} },
+          { payload: 'helloD4', id: 'X', clock: { id: identity4.id, time: 6} },
+          { payload: 'helloA5', id: 'X', clock: { id: identity.id, time: 7} },
+          { payload: 'helloD5', id: 'X', clock: { id: identity4.id, time: 7} },
+          { payload: 'helloD6', id: 'X', clock: { id: identity4.id, time: 8} },
         ]
+        // const expectedData = [
+        //   { payload: 'helloA1', id: 'X', clock: { id: 'A', time: 1} },
+        //   { payload: 'helloB1', id: 'X', clock: { id: 'B', time: 1} },
+        //   { payload: 'helloD1', id: 'X', clock: { id: 'D', time: 1} },
+        //   { payload: 'helloA2', id: 'X', clock: { id: 'A', time: 2} },
+        //   { payload: 'helloB2', id: 'X', clock: { id: 'B', time: 2} },
+        //   { payload: 'helloD2', id: 'X', clock: { id: 'D', time: 2} },
+        //   { payload: 'helloC1', id: 'X', clock: { id: 'C', time: 3} },
+        //   { payload: 'helloC2', id: 'X', clock: { id: 'C', time: 4} },
+        //   { payload: 'helloD3', id: 'X', clock: { id: 'D', time: 5} },
+        //   { payload: 'helloD4', id: 'X', clock: { id: 'D', time: 6} },
+        //   { payload: 'helloA5', id: 'X', clock: { id: 'A', time: 7} },
+        //   { payload: 'helloD5', id: 'X', clock: { id: 'D', time: 7} },
+        //   { payload: 'helloD6', id: 'X', clock: { id: 'D', time: 8} },
+        // ]
 
         const transformed = log4.values.map((e) => {
           return { payload: e.payload, id: e.id, clock: e.clock }
@@ -860,12 +923,12 @@ apis.forEach((IPFS) => {
 
         await log1.join(log3)
         assert.equal(log1.id, 'X')
-        assert.equal(log1.clock.id, 'A')
+        assert.equal(log1.clock.id, identity.id)
         assert.equal(log1.clock.time, 2)
 
         await log3.join(log1)
         assert.equal(log3.id, 'X')
-        assert.equal(log3.clock.id, 'C')
+        assert.equal(log3.clock.id, identity3.id)
         assert.equal(log3.clock.time, 2)
 
         await log3.append('helloC1')
@@ -880,7 +943,7 @@ apis.forEach((IPFS) => {
         await log4.append('helloD3')
         await log4.append('helloD4')
 
-        assert.equal(log4.clock.id, 'D')
+        assert.equal(log4.clock.id, identity4.id)
         assert.equal(log4.clock.time, 6)
 
         const expectedData = [
@@ -963,27 +1026,28 @@ apis.forEach((IPFS) => {
     })
 
     describe('fromEntry', () => {
+
       it('creates a log from an entry', async () => {
-        let fixture = await LogCreator.createLog1(ipfs)
+        let fixture = await LogCreator.createLog1(ipfs, [identity, identity2, identity3, identity4])
         let data = fixture.log
 
-        let log = await Log.fromEntry(ipfs, data.heads, -1, null, testEntryValidator)
+        let log = await Log.fromEntry(ipfs, data.heads, -1, null, testEntryValidator, identity)
         assert.equal(log.id, data.heads[0].id)
         assert.equal(log.length, 16)
         assert.deepEqual(log.values.map(e => e.payload), fixture.expectedData)
       })
 
       it('keeps the original heads', async () => {
-        let fixture = await LogCreator.createLog1(ipfs)
+        let fixture = await LogCreator.createLog1(ipfs, [identity, identity2, identity3, identity4])
         let data = fixture.log
 
-        let log1 = await Log.fromEntry(ipfs, data.heads, data.heads.length, null, testEntryValidator)
+        let log1 = await Log.fromEntry(ipfs, data.heads, data.heads.length, null, testEntryValidator, identity)
         assert.equal(log1.id, data.heads[0].id)
         assert.equal(log1.length, data.heads.length)
         assert.equal(log1.values[0].payload, 'entryC0')
         assert.equal(log1.values[1].payload, 'entryA10')
 
-        let log2 = await Log.fromEntry(ipfs, data.heads, 4, null, testEntryValidator)
+        let log2 = await Log.fromEntry(ipfs, data.heads, 4, null, testEntryValidator, identity2)
         assert.equal(log2.id, data.heads[0].id)
         assert.equal(log2.length, 4)
         assert.equal(log2.values[0].payload, 'entryC0')
@@ -991,7 +1055,7 @@ apis.forEach((IPFS) => {
         assert.equal(log2.values[2].payload, 'entryA9')
         assert.equal(log2.values[3].payload, 'entryA10')
 
-        let log3 = await Log.fromEntry(ipfs, data.heads, 7, null, testEntryValidator)
+        let log3 = await Log.fromEntry(ipfs, data.heads, 7, null, testEntryValidator, identity3)
         assert.equal(log3.id, data.heads[0].id)
         assert.equal(log3.length, 7)
         assert.equal(log3.values[0].payload, 'entryB5')
@@ -1004,12 +1068,12 @@ apis.forEach((IPFS) => {
       })
 
       it('onProgress callback is fired for each entry', async () => {
-        const log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        const log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator,identity)
         let items1 = []
         const amount = 100
         for(let i = 1; i <= amount; i ++) {
           const prev1 = last(items1)
-          const n1 = await Entry.create(ipfs, entryValidator, 'A', 'entryA' + i, [prev1])
+          const n1 = await createAndPublishEntry(ipfs, identity, 'A', 'entryA' + i, [prev1])
           items1.push(n1)
         }
 
@@ -1026,13 +1090,13 @@ apis.forEach((IPFS) => {
           prevDepth = depth
         }
 
-        const a = await Log.fromEntry(ipfs, last(items1), -1, [], testEntryValidator1, callback)
+        const a = await Log.fromEntry(ipfs, last(items1), -1, [], testEntryValidator, identity, callback)
       })
 
       it('retrieves partial log from an entry hash', async () => {
-        const log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        const log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        const log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        const log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        const log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        const log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         let items1 = []
         let items2 = []
         let items3 = []
@@ -1041,30 +1105,30 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, log1._entryValidator, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, log2._entryValidator, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, log3._entryValidator, 'X', 'entryC' + i, [prev3, n2])
+          const n1 = await createAndPublishEntry(ipfs, log1._identity, 'X', 'entryA' + i, [prev1])
+          const n2 = await createAndPublishEntry(ipfs, log2._identity, 'X', 'entryB' + i, [prev2, n1])
+          const n3 = await createAndPublishEntry(ipfs, log3._identity, 'X', 'entryC' + i, [prev3, n2])
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
         }
 
         // limit to 10 entries
-        const a = await Log.fromEntry(ipfs, last(items1), 10, null, testEntryValidator)
+        const a = await Log.fromEntry(ipfs, last(items1), 10, null, testEntryValidator, identity)
         assert.equal(a.length, 10)
 
         // limit to 42 entries
-        const b = await Log.fromEntry(ipfs, last(items1), 42, null, testEntryValidator)
+        const b = await Log.fromEntry(ipfs, last(items1), 42, null, testEntryValidator, identity)
         assert.equal(b.length, 42)
       })
 
       it('throws an error if trying to create a log from a hash of an entry', async () => {
-        const log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        const log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         let items1 = []
         const amount = 5
         for(let i = 1; i <= amount; i ++) {
           const prev1 = last(items1)
-          const n1 = await Entry.create(ipfs, entryValidator, 'A', 'entryA' + i, [prev1])
+          const n1 = await createAndPublishEntry(ipfs, identity, 'A', 'entryA' + i, [prev1])
           items1.push(n1)
         }
 
@@ -1089,9 +1153,9 @@ apis.forEach((IPFS) => {
         let result
 
         beforeEach(async () => {
-          log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-          log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-          log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+          log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+          log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+          log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
           items1 = []
           items2 = []
           items3 = []
@@ -1099,9 +1163,9 @@ apis.forEach((IPFS) => {
             const prev1 = last(items1)
             const prev2 = last(items2)
             const prev3 = last(items3)
-            const n1 = await Entry.create(ipfs, log1._entryValidator, log1.id, 'entryA' + i, [prev1], log1.clock)
-            const n2 = await Entry.create(ipfs, log2._entryValidator, log2.id, 'entryB' + i, [prev2, n1], log2.clock)
-            const n3 = await Entry.create(ipfs, log3._entryValidator, log3.id, 'entryC' + i, [prev3, n2], log3.clock)
+            const n1 = await createAndPublishEntry(ipfs, log1._identity, log1.id, 'entryA' + i, [prev1], log1.clock)
+            const n2 = await createAndPublishEntry(ipfs, log2._identity, log2.id, 'entryB' + i, [prev2, n1], log2.clock)
+            const n3 = await createAndPublishEntry(ipfs, log3._identity, log3.id, 'entryC' + i, [prev3, n2], log3.clock)
             log1.clock.tick()
             log2.clock.tick()
             log3.clock.tick()
@@ -1118,28 +1182,28 @@ apis.forEach((IPFS) => {
         })
 
         it('returns all entries - no excluded entries', async () => {
-          const a = await Log.fromEntry(ipfs, last(items1), -1, null, testEntryValidator)
+          const a = await Log.fromEntry(ipfs, last(items1), -1, null, testEntryValidator, identity)
           assert.equal(a.length, amount)
           assert.equal(a.values[0].hash, items1[0].hash)
         })
 
         it('returns all entries - including excluded entries', async () => {
           // One entry
-          const a = await Log.fromEntry(ipfs, last(items1), -1, [items1[0]], testEntryValidator)
+          const a = await Log.fromEntry(ipfs, last(items1), -1, [items1[0]], testEntryValidator, identity)
           assert.equal(a.length, amount)
           assert.equal(a.values[0].hash, items1[0].hash)
 
           // All entries
-          const b = await Log.fromEntry(ipfs, last(items1), -1, items1, testEntryValidator)
+          const b = await Log.fromEntry(ipfs, last(items1), -1, items1, testEntryValidator,identity)
           assert.equal(b.length, amount)
           assert.equal(b.values[0].hash, items1[0].hash)
         })
       })
 
       it('retrieves full log from an entry hash', async () => {
-        const log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        const log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        const log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        const log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        const log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        const log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         let items1 = []
         let items2 = []
         let items3 = []
@@ -1148,28 +1212,28 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, log1._entryValidator, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, log2._entryValidator, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, log3._entryValidator, 'X', 'entryC' + i, [prev3, n2])
+          const n1 = await createAndPublishEntry(ipfs, log1._identity, 'X', 'entryA' + i, [prev1])
+          const n2 = await createAndPublishEntry(ipfs, log2._identity, 'X', 'entryB' + i, [prev2, n1])
+          const n3 = await createAndPublishEntry(ipfs, log3._identity, 'X', 'entryC' + i, [prev3, n2])
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
         }
 
-        const a = await Log.fromEntry(ipfs, [last(items1)], amount, null, testEntryValidator)
+        const a = await Log.fromEntry(ipfs, [last(items1)], amount, null, testEntryValidator, identity)
         assert.equal(a.length, amount)
 
-        const b = await Log.fromEntry(ipfs, [last(items2)], amount * 2, null, testEntryValidator)
+        const b = await Log.fromEntry(ipfs, [last(items2)], amount * 2, null, testEntryValidator, identity2)
         assert.equal(b.length, amount * 2)
 
-        const c = await Log.fromEntry(ipfs, [last(items3)], amount * 3, null, testEntryValidator)
+        const c = await Log.fromEntry(ipfs, [last(items3)], amount * 3, null, testEntryValidator, identity3)
         assert.equal(c.length, amount * 3)
       })
 
       it('retrieves full log from an entry hash 2', async () => {
-        const log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        const log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        const log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        const log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        const log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        const log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         let items1 = []
         let items2 = []
         let items3 = []
@@ -1178,9 +1242,9 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, log1._entryValidator, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, log2._entryValidator, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, log3._entryValidator, 'X', 'entryC' + i, [prev3, n1, n2])
+          const n1 = await createAndPublishEntry(ipfs, log1._identity, 'X', 'entryA' + i, [prev1])
+          const n2 = await createAndPublishEntry(ipfs, log2._identity, 'X', 'entryB' + i, [prev2, n1])
+          const n3 = await createAndPublishEntry(ipfs, log3._identity, 'X', 'entryC' + i, [prev3, n1, n2])
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
@@ -1197,9 +1261,10 @@ apis.forEach((IPFS) => {
       })
 
       it('retrieves full log from an entry hash 3', async () => {
-        let log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        let log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
+
         let items1 = []
         let items2 = []
         let items3 = []
@@ -1211,9 +1276,9 @@ apis.forEach((IPFS) => {
           log1.clock.tick()
           log2.clock.tick()
           log3.clock.tick()
-          const n1 = await Entry.create(ipfs, log1._entryValidator, 'X', 'entryA' + i, [prev1], log1.clock)
-          const n2 = await Entry.create(ipfs, log2._entryValidator, 'X', 'entryB' + i, [prev2, n1], log2.clock)
-          const n3 = await Entry.create(ipfs, log3._entryValidator, 'X', 'entryC' + i, [prev3, n1, n2], log3.clock)
+          const n1 = await createAndPublishEntry(ipfs, log1._identity, 'X', 'entryA' + i, [prev1], log1.clock)
+          const n2 = await createAndPublishEntry(ipfs, log2._identity, 'X', 'entryB' + i, [prev2, n1], log2.clock)
+          const n3 = await createAndPublishEntry(ipfs, log3._identity, 'X', 'entryC' + i, [prev3, n1, n2], log3.clock)
           log1.clock.merge(log2.clock)
           log1.clock.merge(log3.clock)
           log2.clock.merge(log1.clock)
@@ -1225,7 +1290,7 @@ apis.forEach((IPFS) => {
           items3.push(n3)
         }
 
-        const a = await Log.fromEntry(ipfs, last(items1), amount, null, testEntryValidator)
+        const a = await Log.fromEntry(ipfs, last(items1), amount, null, testEntryValidator, identity)
         assert.equal(a.length, amount)
 
         const itemsInB = [
@@ -1251,11 +1316,11 @@ apis.forEach((IPFS) => {
           'entryB10'
         ]
 
-        const b = await Log.fromEntry(ipfs, last(items2), amount * 2, null, testEntryValidator)
+        const b = await Log.fromEntry(ipfs, last(items2), amount * 2, null, testEntryValidator, identity3)
         assert.equal(b.length, amount * 2)
         assert.deepEqual(itemsInB, b.values.map((e) => e.payload))
 
-        let c = await Log.fromEntry(ipfs, last(items3), amount * 3, null, testEntryValidator)
+        let c = await Log.fromEntry(ipfs, last(items3), amount * 3, null, testEntryValidator, identity3)
         await c.append('EOF')
         assert.equal(c.length, amount * 3 + 1)
 
@@ -1293,29 +1358,29 @@ apis.forEach((IPFS) => {
           'EOF'
         ]
         assert.deepEqual(c.values.map(e => e.payload), tmp)
-
-        let logX = new Log(ipfs, 'X', null, null, null, testEntryValidator) // make sure logX comes after A, B and C
+        //
+        let logX = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity4) // make sure logX comes after A, B and C
         await logX.append('1')
         await logX.append('2')
         await logX.append('3')
-        const d = await Log.fromEntry(ipfs, last(logX.values), -1, null, testEntryValidator)
+        const d = await Log.fromEntry(ipfs, last(logX.values), -1, null, testEntryValidator, identity4)
 
         await c.join(d)
         await d.join(c)
 
         await c.append('DONE')
         await d.append('DONE')
-        const f = await Log.fromEntry(ipfs, last(c.values), -1, [], testEntryValidator)
-        const g = await Log.fromEntry(ipfs, last(d.values), -1, [], testEntryValidator)
+        const f = await Log.fromEntry(ipfs, last(c.values), -1, [], testEntryValidator, identity4)
+        const g = await Log.fromEntry(ipfs, last(d.values), -1, [], testEntryValidator, identity4)
 
         assert.equal(f.toString(), bigLogString)
         assert.equal(g.toString(), bigLogString)
       })
 
       it('retrieves full log of randomly joined log', async () => {
-        let log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        let log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
 
         for(let i = 1; i <= 5; i ++) {
           await log1.append('entryA' + i)
@@ -1350,10 +1415,10 @@ apis.forEach((IPFS) => {
       })
 
       it('retrieves randomly joined log deterministically', async () => {
-        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        let logB = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
-        let log  = new Log(ipfs, 'X', null, null, null, testEntryValidator4)
+        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        let logB = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
+        let log  = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity4)
 
         for(let i = 1; i <= 5; i ++) {
           await logA.append('entryA' + i)
@@ -1386,7 +1451,7 @@ apis.forEach((IPFS) => {
       })
 
       it('sorts', async () => {
-        let testLog = await LogCreator.createLog1(ipfs)
+        let testLog = await LogCreator.createLog1(ipfs, [identity, identity2, identity3, identity4])
         let log = testLog.log
         const expectedData = testLog.expectedData
 
@@ -1435,7 +1500,7 @@ apis.forEach((IPFS) => {
       })
 
       it('sorts deterministically from random order', async () => {
-        let testLog = await LogCreator.createLog1(ipfs)
+        let testLog = await LogCreator.createLog1(ipfs, [identity, identity2, identity3, identity4])
         let log = testLog.log
         const expectedData = testLog.expectedData
 
@@ -1451,7 +1516,7 @@ apis.forEach((IPFS) => {
       })
 
       it('sorts entries correctly', async () => {
-        let testLog = await LogCreator.createLog100_2(ipfs)
+        let testLog = await LogCreator.createLog100_2(ipfs, [identity, identity2, identity3, identity4])
         let log = testLog.log
         const expectedData = testLog.expectedData
         assert.deepEqual(log.values.map(e => e.payload), expectedData)
@@ -1460,10 +1525,10 @@ apis.forEach((IPFS) => {
       it('retrieves partially joined log deterministically - single next pointer', async () => {
         const nextPointerAmount = 1
 
-        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        let logB = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
-        let log  = new Log(ipfs, 'X', null, null, null, testEntryValidator4)
+        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        let logB = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
+        let log  = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity4)
 
         for(let i = 1; i <= 5; i ++) {
           await logA.append('entryA' + i, nextPointerAmount)
@@ -1488,7 +1553,7 @@ apis.forEach((IPFS) => {
         const mh = await log.toMultihash()
 
         // First 5
-        let res = await Log.fromMultihash(ipfs, mh, 5, null, testEntryValidator)
+        let res = await Log.fromMultihash(ipfs, mh, 5, null, testEntryValidator, identity)
 
         const first5 = [
           'entryA5', 'entryB5', 'entryC0', 'entryA9', 'entryA10',
@@ -1499,7 +1564,7 @@ apis.forEach((IPFS) => {
         assert.deepEqual(res.values.map(e => e.payload), first5)
 
         // First 11
-        res = await Log.fromMultihash(ipfs, mh, 11, null, testEntryValidator)
+        res = await Log.fromMultihash(ipfs, mh, 11, null, testEntryValidator, identity)
 
         const first11 = [
           'entryA3', 'entryB3', 'entryA4', 'entryB4',
@@ -1511,7 +1576,7 @@ apis.forEach((IPFS) => {
         assert.deepEqual(res.values.map(e => e.payload), first11)
 
         // All but one
-        res = await Log.fromMultihash(ipfs, mh, 16 - 1, null, testEntryValidator)
+        res = await Log.fromMultihash(ipfs, mh, 16 - 1, null, testEntryValidator, identity)
 
         const all = [
           'entryA1', /* excl */ 'entryA2', 'entryB2', 'entryA3', 'entryB3',
@@ -1526,10 +1591,10 @@ apis.forEach((IPFS) => {
       it('retrieves partially joined log deterministically - multiple next pointers', async () => {
         const nextPointersAmount = 64
 
-        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        let logB = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
-        let log  = new Log(ipfs, 'X', null, null, null, testEntryValidator4)
+        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        let logB = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
+        let log  = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity4)
 
         for(let i = 1; i <= 5; i ++) {
           await logA.append('entryA' + i, nextPointersAmount)
@@ -1554,7 +1619,7 @@ apis.forEach((IPFS) => {
         const mh = await log.toMultihash()
 
         // First 5
-        let res = await Log.fromMultihash(ipfs, mh, 5, null, testEntryValidator)
+        let res = await Log.fromMultihash(ipfs, mh, 5, null, testEntryValidator, identity)
 
         const first5 = [
           'entryC0', 'entryA7', 'entryA8', 'entryA9', 'entryA10',
@@ -1563,7 +1628,7 @@ apis.forEach((IPFS) => {
         assert.deepEqual(res.values.map(e => e.payload), first5)
 
         // First 11
-        res = await Log.fromMultihash(ipfs, mh, 11, null, testEntryValidator)
+        res = await Log.fromMultihash(ipfs, mh, 11, null, testEntryValidator, identity)
 
         const first11 = [
              'entryA1', 'entryA2', 'entryA3', 'entryA4',
@@ -1575,7 +1640,7 @@ apis.forEach((IPFS) => {
         assert.deepEqual(res.values.map(e => e.payload), first11)
 
         // All but one
-        res = await Log.fromMultihash(ipfs, mh, 16 - 1, null, testEntryValidator)
+        res = await Log.fromMultihash(ipfs, mh, 16 - 1, null, testEntryValidator, identity)
 
         const all = [
           'entryA1', /* excl */ 'entryA2', 'entryB2', 'entryA3', 'entryB3',
@@ -1598,31 +1663,31 @@ apis.forEach((IPFS) => {
         assert.equal(err.message, 'ImmutableDB instance not defined')
       })
     })
-
+    //
     describe('heads', () => {
       it('finds one head after one entry', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         await log1.append('helloA1')
         assert.equal(log1.heads.length, 1)
       })
 
       it('finds one head after two entries', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         await log1.append('helloA1')
         await log1.append('helloA2')
         assert.equal(log1.heads.length, 1)
       })
 
       it('log contains the head entry', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         await log1.append('helloA1')
         await log1.append('helloA2')
         assert.deepEqual(log1.get(log1.heads[0].hash), log1.heads[0])
       })
 
       it('finds head after a join and append', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
 
         await log1.append('helloA1')
         await log1.append('helloA2')
@@ -1637,8 +1702,8 @@ apis.forEach((IPFS) => {
       })
 
       it('finds two heads after a join', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
 
         await log1.append('helloA1')
         await log1.append('helloA2')
@@ -1657,8 +1722,8 @@ apis.forEach((IPFS) => {
       })
 
       it('finds two heads after two joins', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
 
         await log1.append('helloA1')
         await log1.append('helloA2')
@@ -1684,9 +1749,9 @@ apis.forEach((IPFS) => {
       })
 
       it('finds two heads after three joins', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log3 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity3)
 
         await log1.append('helloA1')
         await log1.append('helloA2')
@@ -1710,9 +1775,9 @@ apis.forEach((IPFS) => {
       })
 
       it('finds three heads after three joins', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log3 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity3)
 
         await log1.append('helloA1')
         await log1.append('helloA2')
@@ -1739,21 +1804,25 @@ apis.forEach((IPFS) => {
     })
 
     describe('tails', () => {
+
+      before( async () => {
+        identity = await getIdentity('A')
+      })
       it('returns a tail', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         await log1.append('helloA1')
         assert.equal(log1.tails.length, 1)
       })
 
       it('tail is a Entry', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         await log1.append('helloA1')
         assert.equal(Entry.isEntry(log1.tails[0]), true)
       })
 
       it('returns tail entries', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log2.append('helloB1')
         await log1.join(log2)
@@ -1763,8 +1832,8 @@ apis.forEach((IPFS) => {
       })
 
       it('returns tail hashes', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1774,8 +1843,8 @@ apis.forEach((IPFS) => {
       })
 
       it('returns no tail hashes if all entries point to empty nexts', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log2.append('helloB1')
         await log1.join(log2)
@@ -1783,14 +1852,14 @@ apis.forEach((IPFS) => {
       })
 
       it('returns tails after loading a partial log', async () => {
-        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
+        let log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
         await log2.append('helloB2')
         await log1.join(log2)
-        const log4 = await Log.fromEntry(ipfs, log1.heads, 2, null, testEntryValidator1)
+        const log4 = await Log.fromEntry(ipfs, log1.heads, 2, null, testEntryValidator, identity)
         assert.equal(log4.length, 2)
         assert.equal(log4.tails.length, 2)
         assert.equal(log4.tails[0].hash, log4.values[1].hash)
@@ -1798,10 +1867,10 @@ apis.forEach((IPFS) => {
       })
 
       it('returns tails sorted by id', async () => {
-        let log1 = new Log(ipfs, 'XX', null, null, null, getTestEntryValidator('X'))
-        let log2 = new Log(ipfs, 'XX', null, null, null, testEntryValidator2)
-        let log3 = new Log(ipfs, 'XX', null, null, null, testEntryValidator1)
-        let log4 = new Log(ipfs, 'XX', null, null, null, testEntryValidator4)
+        let log1 = new Log(ipfs, 'XX', null, null, null, testEntryValidator, identity)
+        let log2 = new Log(ipfs, 'XX', null, null, null, testEntryValidator, identity2)
+        let log3 = new Log(ipfs, 'XX', null, null, null, testEntryValidator, identity3)
+        let log4 = new Log(ipfs, 'XX', null, null, null, testEntryValidator, identity4)
         await log1.append('helloX1')
         await log2.append('helloB1')
         await log3.append('helloA1')
@@ -1810,10 +1879,10 @@ apis.forEach((IPFS) => {
         await log4.join(log3)
         assert.equal(log4.tails.length, 3)
         assert.equal(log4.tails[0].id, 'XX')
-        assert.equal(log4.tails[0].clock.id, 'A')
-        assert.equal(log4.tails[1].clock.id, 'B')
-        assert.equal(log4.tails[2].clock.id, 'X')
-        assert.equal(log4.clock.id, 'D')
+        assert.equal(log4.tails[0].clock.id, identity.id)
+        assert.equal(log4.tails[1].clock.id, identity2.id)
+        assert.equal(log4.tails[2].clock.id, identity3.id)
+        assert.equal(log4.clock.id, identity4.id)
       })
     })
 
@@ -1821,9 +1890,9 @@ apis.forEach((IPFS) => {
       let log1, log2, log3
 
       beforeEach(async () => {
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
       })
 
       it('join is associative', async () => {
@@ -1840,9 +1909,9 @@ apis.forEach((IPFS) => {
 
         const res1 = log1.values.slice()//.map((e) => e.hash).join(",")
 
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1873,8 +1942,8 @@ apis.forEach((IPFS) => {
         await log2.join(log1)
         const res1 = log2.values.slice()//.map((e) => e.hash).join(",")
 
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1893,8 +1962,8 @@ apis.forEach((IPFS) => {
 
       it('multiple joins are commutative', async () => {
         // b + a == a + b
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1902,8 +1971,8 @@ apis.forEach((IPFS) => {
         await log2.join(log1)
         const resA1 = log2.toString()
 
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1914,8 +1983,8 @@ apis.forEach((IPFS) => {
         assert.equal(resA1, resA2)
 
         // a + b == b + a
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1923,8 +1992,8 @@ apis.forEach((IPFS) => {
         await log1.join(log2)
         const resB1 = log1.toString()
 
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1935,8 +2004,8 @@ apis.forEach((IPFS) => {
         assert.equal(resB1, resB2)
 
         // a + c == c + a
-        log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator1)
-        log3 = new Log(ipfs, 'A', null, null, null, testEntryValidator3)
+        log1 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity)
+        log3 = new Log(ipfs, 'A', null, null, null, testEntryValidator, identity3)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log3.append('helloC1')
@@ -1944,8 +2013,8 @@ apis.forEach((IPFS) => {
         await log3.join(log1)
         const resC1 = log3.toString()
 
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log3.append('helloC1')
@@ -1956,8 +2025,8 @@ apis.forEach((IPFS) => {
         assert.equal(resC1, resC2)
 
         // c + b == b + c
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         await log2.append('helloB1')
         await log2.append('helloB2')
         await log3.append('helloC1')
@@ -1965,8 +2034,8 @@ apis.forEach((IPFS) => {
         await log3.join(log2)
         const resD1 = log3.toString()
 
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         await log2.append('helloB1')
         await log2.append('helloB2')
         await log3.append('helloC1')
@@ -1977,9 +2046,9 @@ apis.forEach((IPFS) => {
         assert.equal(resD1, resD2)
 
         // a + b + c == c + b + a
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -1990,9 +2059,9 @@ apis.forEach((IPFS) => {
         await log1.join(log3)
         const logLeft = log1.toString()
 
-        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
-        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator2)
-        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator3)
+        log1 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
+        log2 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity2)
+        log3 = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity3)
         await log1.append('helloA1')
         await log1.append('helloA2')
         await log2.append('helloB1')
@@ -2007,7 +2076,7 @@ apis.forEach((IPFS) => {
       })
 
       it('join is idempotent', async () => {
-        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator1)
+        let logA = new Log(ipfs, 'X', null, null, null, testEntryValidator, identity)
         await logA.append('helloA1')
         await logA.append('helloA2')
         await logA.append('helloA3')

@@ -9,7 +9,7 @@ const Clock = require('./lamport-clock')
 const isDefined = require('./utils/is-defined')
 const isFunction = require('./utils/is-function')
 const _uniques = require('./utils/uniques')
-const EntryValidator = require('./validator')
+// const EntryValidator = require('./validator')
 
 const randomId = () => new Date().getTime().toString()
 const getHash = e => e.hash
@@ -48,7 +48,7 @@ class Log extends GSet {
    * to be used as a fallback to the clockId
    * @return {Log}                            Log
    */
-  constructor (ipfs, id, entries, heads, clock, validator) {
+  constructor (ipfs, id, entries, heads, clock, validator, identity) {
     // TODO: We have to simplify this constructor and get an "options" object or something like this
     if (!isDefined(ipfs)) {
       throw LogError.ImmutableDBNotDefinedError()
@@ -72,7 +72,8 @@ class Log extends GSet {
     this._id = id || randomId()
 
     // Entry validator
-    this._entryValidator = new EntryValidator(validator)
+    this._entryValidator = validator
+    this._identity = identity
 
     // Add entries to the internal cache
     entries = entries || []
@@ -94,7 +95,7 @@ class Log extends GSet {
     // Take the given key as the clock id is it's a Key instance,
     // otherwise if key was given, take whatever it is,
     // and if it was null, take the given id as the clock id
-    const clockId = this._entryValidator ? this._entryValidator.publicKey : this._id
+    const clockId = this._identity ? this._identity.id : this._id
     this._clock = new Clock(clockId, maxTime)
   }
 
@@ -216,7 +217,14 @@ class Log extends GSet {
     // Get the required amount of hashes to next entries (as per current state of the log)
     const nexts = Object.keys(this.traverse(this.heads, pointerCount))
     // Create the entry and add it to the internal cache
-    const entry = await Entry.create(this._storage, this._entryValidator, this.id, data, nexts, this.clock)
+
+    if (! await this._entryValidator.canAppend(this._identity.id))
+      throw new Error("Identity.id is not permitted to write")
+    let entry = await Entry.create(this.id, data, nexts, this.clock)
+    entry.sig = await this._identity.provider.sign(this._identity, Buffer.from(JSON.stringify(entry)))
+    entry.key = { id : this._identity.id, publicKey: this._identity.publicKey, signature: this._identity.signature }
+    // entry.sig = signature
+    entry.hash = await Entry.toMultihash(this._storage, entry)
     this._entryIndex[entry.hash] = entry
     nexts.forEach(e => this._nextsIndex[e] = entry.hash)
     this._headsIndex = {}
@@ -249,7 +257,14 @@ class Log extends GSet {
     const newItems = Log.difference(log, this)
 
     // Verify that all new entries can be joined with this log, throws an error if fails
-    const verify = async (entry) => await Entry.verify(entry, this._entryValidator)
+    const permitted = async (entry) => {
+      if (!entry.key)
+        throw new Error("Entry doesn't have a public key")
+      if (! await this._entryValidator.canAppend(entry.key.id))
+        throw new Error("Append not permitted")
+    }
+    const verify = async (entry) => await Log.verify(entry, this._identity)
+    await pMap(Object.values(newItems), permitted, { concurrency: 1 })
     await pMap(Object.values(newItems), verify, { concurrency: 1 })
 
     // Update the internal entry index
@@ -363,13 +378,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromMultihash (ipfs, hash, length = -1, exclude, entryValidator, onProgressCallback) {
+  static fromMultihash (ipfs, hash, length = -1, exclude, entryValidator, identity, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error(`Invalid hash: ${hash}`)
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromMultihash(ipfs, hash, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, data.heads, data.clock, entryValidator))
+      .then((data) => new Log(ipfs, data.id, data.values, data.heads, data.clock, entryValidator, identity))
   }
 
   /**
@@ -380,13 +395,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromEntryHash (ipfs, hash, id, length = -1, exclude, entryValidator, onProgressCallback) {
+  static fromEntryHash (ipfs, hash, id, length = -1, exclude, entryValidator, identity, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error("'hash' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntryHash(ipfs, hash, id, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, id, data.values, null, null, entryValidator))
+      .then((data) => new Log(ipfs, id, data.values, null, null, entryValidator, identity))
   }
 
   /**
@@ -397,12 +412,12 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}      New Log
    */
-  static fromJSON (ipfs, json, length = -1, entryValidator, timeout, onProgressCallback) {
+  static fromJSON (ipfs, json, length = -1, entryValidator, identity, timeout, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromJSON(ipfs, json, length, timeout, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator))
+      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator, identity))
   }
 
   /**
@@ -414,13 +429,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}       New Log
    */
-  static fromEntry (ipfs, sourceEntries, length = -1, exclude, entryValidator, onProgressCallback) {
+  static fromEntry (ipfs, sourceEntries, length = -1, exclude, entryValidator, identity, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(sourceEntries)) throw new Error("'sourceEntries' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntry(ipfs, sourceEntries, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator))
+      .then((data) => new Log(ipfs, data.id, data.values, null, null, entryValidator, identity))
   }
 
   /**
@@ -538,6 +553,27 @@ class Log extends GSet {
       }
     }
     return res
+  }
+
+  static async verify (entry, identity) {
+    if (!entry.key) throw new Error("Entry doesn't have a public key")
+    if (!entry.sig) throw new Error("Entry doesn't have a signature")
+    if (!Entry.isEntry(entry)) throw new Error("Not a valid Log entry")
+
+    // Throws an error if verification fails
+    let e = {
+      hash: null,
+      id: entry.id, // For determining a unique chain
+      payload: entry.payload, // Can be any JSON.stringifyable data
+      next: entry.next, // Array of Multihashes
+      v:entry.v, // For future data structure updates, should currently always be 0
+      clock:entry.clock,
+    }
+    const isValid = await identity.provider.verify(entry.sig, entry.key.publicKey, Buffer.from(JSON.stringify(e)))
+    if (!isValid) {
+      throw new Error(`Invalid signature on entry: ${entry.hash}`)
+    }
+    return true
   }
 }
 

@@ -7,7 +7,9 @@ const DatastoreLevel = require('datastore-level')
 const config = require('./config/ipfs-daemon.config')
 const Log = require('../src/log.js')
 const MemStore = require('./utils/mem-store')
-const getTestEntryValidator = require('./utils/test-entry-validator')
+const ACL = require('../src/acl')
+const getTestEntryValidator = require('./utils/test-entry-acl')
+const getIdentity = require('./utils/test-entry-identity')
 
 const apis = [require('ipfs')]
 
@@ -43,7 +45,7 @@ apis.forEach((IPFS) => {
     this.timeout(40000)
 
     let ipfs1, ipfs2, client1, client2, db1, db2, id1, id2
-
+    let testACL, identity1, identity2, identity3, identity4
     before(function (done) {
       rmrf.sync(config.daemon1.repo)
       rmrf.sync(config.daemon2.repo)
@@ -62,6 +64,13 @@ apis.forEach((IPFS) => {
               ipfs2.id()
                 .then((id) => id2 = id.id)
                 .then(async () => {
+
+                  testACL = new ACL(getTestEntryValidator())
+                  testACL.add(testACL._capabilities, 'write', '*', 'ethAddr')
+                  identity1 = await getIdentity('A')
+                  identity2 = await getIdentity('B')
+                  identity3 = await getIdentity('C')
+                  identity4 = await getIdentity('D')
 
                   // Use memory store for quicker tests
                   const memstore = new MemStore()
@@ -104,7 +113,7 @@ apis.forEach((IPFS) => {
         const exclude = log1.values.map((e) => e.hash)
         process.stdout.write('\r')
         process.stdout.write(`> Buffer1: ${buffer1.length} - Buffer2: ${buffer2.length}`)
-        const log = await Log.fromMultihash(ipfs1, message.data.toString(), -1, null, getTestEntryValidator('peerA'))
+        const log = await Log.fromMultihash(ipfs1, message.data.toString(), -1, null, testACL, identity1)
         await log1.join(log)
         processing --
       }
@@ -117,16 +126,16 @@ apis.forEach((IPFS) => {
         process.stdout.write('\r')
         process.stdout.write(`> Buffer1: ${buffer1.length} - Buffer2: ${buffer2.length}`)
         const exclude = log2.values.map((e) => e.hash)
-        const log = await Log.fromMultihash(ipfs2, message.data.toString(), -1, null, getTestEntryValidator('peerB'))
+        const log = await Log.fromMultihash(ipfs2, message.data.toString(), -1, null, testACL, identity2)
         await log2.join(log)
         processing --
       }
 
       beforeEach((done) => {
-        log1 = new Log(ipfs1, 'A', null, null, null, getTestEntryValidator('peerA'))
-        log2 = new Log(ipfs2, 'A', null, null, null, getTestEntryValidator('peerB'))
-        input1 = new Log(ipfs1, 'A', null, null, null, getTestEntryValidator('peerA'))
-        input2 = new Log(ipfs2, 'A', null, null, null, getTestEntryValidator('peerB'))
+        log1 = new Log(ipfs1, 'A', null, null, null, testACL, identity1)
+        log2 = new Log(ipfs2, 'A', null, null, null, testACL, identity2)
+        input1 = new Log(ipfs1, 'A', null, null, null, testACL, identity1)
+        input2 = new Log(ipfs2, 'A', null, null, null, testACL, identity2)
         ipfs1.pubsub.subscribe(channel, handleMessage, (err) => {
           if (err)
             return done(err)
@@ -172,7 +181,7 @@ apis.forEach((IPFS) => {
               const timeout = 30000
               await whileProcessingMessages(timeout)
 
-              let result = new Log(ipfs1, 'A', null, null, null, getTestEntryValidator('peerA'))
+              let result = new Log(ipfs1, 'A', null, null, null, testACL, identity1)
               await result.join(log1)
               await result.join(log2)
 

@@ -12,21 +12,21 @@ describe('ACL', function() {
     assert.deepEqual(acl._capabilities, {})
   })
 
-  it('adds capability', () => {
+  it('adds capability', async () => {
     acl.add(acl._capabilities, 'write', 'key', 'ethAddr')
-    var permitted = acl.canAppend('key')
+    var permitted = await acl.canAppend('key')
     assert.equal(permitted, true)
   })
 
-  it('key not in acl cannot append', () => {
+  it('key not in acl cannot append', async () => {
     acl.add(acl._capabilities, 'write', 'key', 'ethAddr')
-    var permitted = acl.canAppend('badkey')
+    var permitted = await acl.canAppend('badkey')
     assert.equal(permitted, false)
   })
 
-  it('canAppend to public log', () => {
-    assert.equal(acl.canAppend('anykey'), false)
+  it('canAppend to public log', async () => {
+    assert.equal(await acl.canAppend('anykey'), false)
     acl.add(acl._capabilities, 'write', '*', 'ethAddr')
-    assert.equal(acl.canAppend('anykey'), true)
+    assert.equal(await acl.canAppend('anykey'), true)
   })
 })

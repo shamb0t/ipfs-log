@@ -8,18 +8,15 @@ const IpfsNotDefinedError = () => new Error('Ipfs instance not defined')
 class Entry {
   /**
    * Create an Entry
-   * @param {IPFS} ipfs - An IPFS instance
    * @param {string|Buffer|Object|Array} data - Data of the entry to be added. Can be any JSON.stringifyable data.
    * @param {Array<Entry|string>} [next=[]] Parents of the entry
    * @example
    * const entry = await Entry.create(ipfs, 'hello')
    * console.log(entry)
-   * // { hash: "Qm...Foo", payload: "hello", next: [] }
+   * // { hash: null, payload: "hello", next: [] }
    * @returns {Promise<Entry>}
    */
-  static async create (ipfs, entryValidator, id, data, next = [], clock) {
-    if (!isDefined(ipfs)) throw IpfsNotDefinedError()
-    if (!isDefined(entryValidator)) throw new Error("Entry validator is null or undefined")
+  static async create (id, data, next = [], clock, nodeId) {
     if (!isDefined(id)) throw new Error('Entry requires an id')
     if (!isDefined(data)) throw new Error('Entry requires data')
     if (!isDefined(next) || !Array.isArray(next)) throw new Error("'next' argument is not an array")
@@ -32,10 +29,10 @@ class Entry {
     // Take the id of the given clock by default,
     // if clock not given, take the signing key if it's a Key instance,
     // or if none given, take the id as the clock id
-    const clockId = clock ? clock.id : (entryValidator ? entryValidator.publicKey : id)
+    const clockId = clock ? clock.id : (nodeId ? nodeId : id)
     const clockTime = clock ? clock.time : null
 
-    let entry = {
+    return {
       hash: null, // "Qm...Foo", we'll set the hash after persisting the entry
       id: id, // For determining a unique chain
       payload: data, // Can be any JSON.stringifyable data
@@ -43,28 +40,6 @@ class Entry {
       v: 0, // For future data structure updates, should currently always be 0
       clock: new Clock(clockId, clockTime),
     }
-
-    const signature = await entryValidator.signEntry(entry)
-    entry.key = entryValidator.publicKey
-    entry.sig = signature
-    entry.hash = await Entry.toMultihash(ipfs, entry)
-
-    return entry
-  }
-
-  static async verify (entry, entryValidator) {
-    if (!entry.key) throw new Error("Entry doesn't have a public key")
-    if (!entry.sig) throw new Error("Entry doesn't have a signature")
-    if (!entryValidator) throw new Error("Entry validator is null or undefined, cannot verify entry")
-    if (!Entry.isEntry(entry)) throw new Error("Not a valid Log entry")
-
-    // Throws an error if verification fails
-    const isValid = await entryValidator.verifyEntrySignature(entry)
-    if (!isValid) {
-      throw new Error(`Invalid signature on entry: ${entry.hash}`)
-    }
-
-    return true
   }
 
   /**

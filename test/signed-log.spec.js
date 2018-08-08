@@ -6,8 +6,9 @@ const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Keystore = require('orbit-db-keystore')
 const Log = require('../src/log')
-const getTestEntryValidator = require('./utils/test-entry-validator')
-
+const getTestEntryValidator = require('./utils/test-entry-acl')
+const ACL = require('../src/acl')
+const getIdentity = require('./utils/test-entry-identity')
 const apis = [require('ipfs')]
 const dataDir = './ipfs/tests/log'
 
@@ -26,7 +27,11 @@ const ipfsConf = {
   },
 }
 
-let ipfs, key1, key2, key3
+const testACL = new ACL(getTestEntryValidator())
+testACL.add(testACL._capabilities, 'write', '*', 'ethAddr')
+const restrictedACL = new ACL(getTestEntryValidator())
+
+let ipfs, key1, key2, key3, identity1, identity2, identity3, identity4
 
 const last = (arr) => {
   return arr[arr.length - 1]
@@ -45,7 +50,13 @@ apis.forEach((IPFS) => {
       key3 = keystore.getKey('C')
       ipfs = new IPFS(ipfsConf)
       ipfs.on('error', done)
-      ipfs.on('ready', () => done())
+      ipfs.on('ready', async () => {
+        identity1 = await getIdentity('A')
+        identity2 = await getIdentity('B')
+        identity3 = await getIdentity('C')
+        identity4 = await getIdentity('D')
+        done()
+      })
     })
 
     after(async () => {
@@ -55,16 +66,16 @@ apis.forEach((IPFS) => {
 
     // TODO: really an EntryValidator test
     it('creates a signed log', () => {
-      const log = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex')))
+      const log = new Log(ipfs, 'A', null, null, null, testACL, identity1)
       assert.notEqual(log.id, null)
-      assert.equal(log._entryValidator.publicKey, key1.getPublic('hex'))
+      assert.equal(log._identity.publicKey, identity1.publicKey)
     })
 
     it('entries contain a signature and a public signing key', async () => {
-      const log = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex')))
+      const log = new Log(ipfs, 'A', null, null, null, testACL, identity1)
       await log.append('one')
       assert.notEqual(log.values[0].sig, null)
-      assert.equal(log.values[0].key, key1.getPublic('hex'))
+      assert.equal(log.values[0].key.publicKey, identity1.publicKey)
     })
 
     it('doesn\'t sign entries when key is not defined', async () => {
@@ -78,8 +89,8 @@ apis.forEach((IPFS) => {
     })
 
     it('doesn\'t join logs with different IDs ', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex')))
-      const log2 = new Log(ipfs, 'B', null, null, null, getTestEntryValidator(key2.getPublic('hex')))
+      const log1 = new Log(ipfs, 'A', null, null, null, testACL, identity1)
+      const log2 = new Log(ipfs, 'B', null, null, null, testACL, identity2)
 
       let err
       try {
@@ -98,8 +109,8 @@ apis.forEach((IPFS) => {
     })
 
     it('throws an error if log is signed but trying to merge with an entry that doesn\'t have public signing key', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex')))
-      const log2 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key2.getPublic('hex')))
+      const log1 = new Log(ipfs, 'A', null, null, null, testACL, identity1)
+      const log2 = new Log(ipfs, 'A', null, null, null, testACL, identity2)
 
       let err
       try {
@@ -114,8 +125,8 @@ apis.forEach((IPFS) => {
     })
 
     it('throws an error if log is signed but trying to merge an entry that doesn\'t have a signature', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex')))
-      const log2 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key2.getPublic('hex')))
+      const log1 = new Log(ipfs, 'A', null, null, null, testACL, identity1)
+      const log2 = new Log(ipfs, 'A', null, null, null, testACL, identity2)
 
       let err
       try {
@@ -134,8 +145,8 @@ apis.forEach((IPFS) => {
         return str.substr(0, index) + replacement+ str.substr(index + replacement.length)
       }
 
-      const log1 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex')))
-      const log2 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key2.getPublic('hex')))
+      const log1 = new Log(ipfs, 'A', null, null, null, testACL, identity1)
+      const log2 = new Log(ipfs, 'A', null, null, null, testACL, identity2)
       let err
 
       try {
@@ -146,7 +157,7 @@ apis.forEach((IPFS) => {
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, 'Error: Could not validate signature or key not allowed')
+      assert.equal(err, 'Error: Invalid signature on entry: ' + log2.values[0].hash)
       assert.equal(log1.values.length, 1)
       assert.equal(log1.values[0].payload, 'one')
     })
@@ -154,13 +165,14 @@ apis.forEach((IPFS) => {
     it('throws an error if entry doesn\'t have append access', async () => {
       // This should be done at the orbit-db level, this is part of orbit ACL
       // It simulates a scenario where "key2" is not allowed to append to the log
+      restrictedACL.add(restrictedACL._capabilities, 'write', identity1.id, 'ethAddr')
       const checkInvalidKey = entry => {
         if (entry.key !== key1.getPublic('hex')) throw new Error('Not allowed to write')
         return getTestEntryValidator.DEFAULT_SIGNATURE
       }
 
-      const log1 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key1.getPublic('hex'), checkInvalidKey))
-      const log2 = new Log(ipfs, 'A', null, null, null, getTestEntryValidator(key2.getPublic('hex'), checkInvalidKey))
+      const log1 = new Log(ipfs, 'A', null, null, null, restrictedACL, identity1)
+      const log2 = new Log(ipfs, 'A', null, null, null, restrictedACL, identity2)
 
       let err
       try {
@@ -170,7 +182,7 @@ apis.forEach((IPFS) => {
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, 'Error: Could not sign entry or key not allowed')
+      assert.equal(err, 'Error: Identity.id is not permitted to write')
     })
   })
 })

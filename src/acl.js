@@ -17,7 +17,7 @@ class ContractACL {
     this.remove = remove
   }
 
-  canAppend(id) {
+  async checkPermission (id) {
     const ids = (this._capabilities['write'] || [])
     if (ids.includes('*'))
         return true
@@ -26,6 +26,9 @@ class ContractACL {
         return true
 
     return false
+  }
+  async canAppend(id) {
+    return await this.checkPermission(id)
   }
 }
 
