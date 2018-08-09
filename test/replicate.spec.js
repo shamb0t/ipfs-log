@@ -7,6 +7,7 @@ const DatastoreLevel = require('datastore-level')
 const config = require('./config/ipfs-daemon.config')
 const Log = require('../src/log.js')
 const MemStore = require('./utils/mem-store')
+const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-validator')
 
 const apis = [require('ipfs')]
 
@@ -37,7 +38,6 @@ const waitForPeers = (ipfs, channel) => {
 }
 
 apis.forEach((IPFS) => {
-
   describe('ipfs-log - Replication', function() {
     this.timeout(40000)
 
@@ -80,10 +80,10 @@ apis.forEach((IPFS) => {
     })
 
     after(async () => {
-      if (ipfs1) 
+      if (ipfs1)
         await ipfs1.stop()
 
-      if (ipfs2) 
+      if (ipfs2)
         await ipfs2.stop()
     })
 
@@ -95,6 +95,10 @@ apis.forEach((IPFS) => {
       let buffer2 = []
       let processing = 0
 
+      const permissionCheckingFn = defaultJoinPermissionCheckingFn(['peerA', 'peerB'])
+      const [idA, aclA] = [getTestIdentity('peerA'), getTestACL('peerA', permissionCheckingFn)]
+      const [idB, aclB] = [getTestIdentity('peerB'), getTestACL('peerB', permissionCheckingFn)]
+
       const handleMessage = async (message) => {
         if (id1 === message.from)
           return
@@ -103,7 +107,7 @@ apis.forEach((IPFS) => {
         const exclude = log1.values.map((e) => e.hash)
         process.stdout.write('\r')
         process.stdout.write(`> Buffer1: ${buffer1.length} - Buffer2: ${buffer2.length}`)
-        const log = await Log.fromMultihash(ipfs1, message.data.toString())
+        const log = await Log.fromMultihash(ipfs1, message.data.toString(), -1, null, aclA, idA)
         await log1.join(log)
         processing --
       }
@@ -116,23 +120,23 @@ apis.forEach((IPFS) => {
         process.stdout.write('\r')
         process.stdout.write(`> Buffer1: ${buffer1.length} - Buffer2: ${buffer2.length}`)
         const exclude = log2.values.map((e) => e.hash)
-        const log = await Log.fromMultihash(ipfs2, message.data.toString())
+        const log = await Log.fromMultihash(ipfs2, message.data.toString(), -1, null, aclB, idB)
         await log2.join(log)
         processing --
       }
 
       beforeEach((done) => {
-        log1 = new Log(ipfs1, 'A', null, null, null, 'peerA')
-        log2 = new Log(ipfs2, 'A', null, null, null, 'peerB')
-        input1 = new Log(ipfs1, 'A', null, null, null, 'peerA')
-        input2 = new Log(ipfs2, 'A', null, null, null, 'peerB')
+        log1 = new Log(ipfs1, 'A', null, null, null, aclA, idA)
+        log2 = new Log(ipfs2, 'A', null, null, null, aclB, idB)
+        input1 = new Log(ipfs1, 'A', null, null, null, aclA, idA)
+        input2 = new Log(ipfs2, 'A', null, null, null, aclB, idB)
         ipfs1.pubsub.subscribe(channel, handleMessage, (err) => {
-          if (err) 
+          if (err)
             return done(err)
           ipfs2.pubsub.subscribe(channel, handleMessage2, (err) => {
-            if (err) 
+            if (err)
               done(err)
-            else 
+            else
               done()
           })
         })
@@ -171,7 +175,7 @@ apis.forEach((IPFS) => {
               const timeout = 30000
               await whileProcessingMessages(timeout)
 
-              let result = new Log(ipfs1, 'A', null, null, null, 'peerA')
+              let result = new Log(ipfs1, 'A', null, null, null, aclA, idA)
               await result.join(log1)
               await result.join(log2)
 

@@ -1,10 +1,13 @@
 'use strict'
 
 const Log = require('../src/log')
+const Keystore = require('orbit-db-keystore')
 const EntryIO = require('../src/entry-io')
 const IPFS = require('ipfs')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
+
+const { ACL, Identity } = Log
 
 // State
 let ipfs
@@ -42,7 +45,22 @@ let run = (() => {
 
   ipfs.on('ready', async () => {
     // Create a log
-    log = new Log(ipfs, 'A')
+    const keystore = Keystore.create('./test-keys')
+    const key = keystore.createKey('benchmark-from-entry-hash')
+    const identity = new Identity(
+      key.getPublic('hex'),
+      data => keystore.sign(key, data),
+      async (sig, entryKey, data) =>  {
+        const pubKey = await keystore.importPublicKey(entryKey)
+        return keystore.verify(sig, pubKey, data)
+      }
+    )
+    const acl = new ACL(async (entry, identity) => {
+      const pubKey = (identity && identity.publicKey) || entry.key
+      return pubKey === key.getPublic('hex')
+    })
+
+    log = new Log(ipfs, 'A', null, null, null, acl, identity)
 
     const count = parseInt(process.argv[2]) || 50000
     const refCount = 64
@@ -102,8 +120,8 @@ let run = (() => {
       log._id,
       -1,
       [],
-      log._key,
-      log._keys,
+      log._acl,
+      log._identity,
       onDataUpdated
     )
 

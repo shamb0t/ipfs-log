@@ -5,9 +5,9 @@ const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Entry = require('../src/entry')
+const { getTestACL, getTestIdentity } = require('./utils/test-entry-validator')
 
 const apis = [require('ipfs')]
-
 const dataDir = './ipfs/tests/entry'
 
 const repoConf = {
@@ -16,6 +16,8 @@ const repoConf = {
   },
 }
 
+const testACL = getTestACL('A')
+const testIdentity = getTestIdentity('A')
 let ipfs, ipfsDaemon
 
 apis.forEach((IPFS) => {
@@ -25,7 +27,7 @@ apis.forEach((IPFS) => {
 
     before((done) => {
       rmrf.sync(dataDir)
-      ipfs = new IPFS({ 
+      ipfs = new IPFS({
         repo: new IPFSRepo(dataDir, repoConf),
         EXPERIMENTAL: {
           pubsub: true,
@@ -38,7 +40,7 @@ apis.forEach((IPFS) => {
     })
 
     after(async () => {
-      if (ipfs) 
+      if (ipfs)
         await ipfs.stop()
     })
 
@@ -108,9 +110,22 @@ apis.forEach((IPFS) => {
         }
       })
 
-      it('throws an error if id is not defined', async () => {
+      it('throws an error if ACL or identity are not defined', async () => {
         try {
           const entry = await Entry.create(ipfs)
+        } catch(e) {
+          assert.equal(e.message, 'ACL is null or undefined, cannot verify entry')
+        }
+        try {
+          const entry = await Entry.create(ipfs, testACL)
+        } catch(e) {
+          assert.equal(e.message, 'Identity is null or undefined, cannot verify entry')
+        }
+      })
+
+      it('throws an error if id is not defined', async () => {
+        try {
+          const entry = await Entry.create(ipfs, testACL, testIdentity)
         } catch(e) {
           assert.equal(e.message, 'Entry requires an id')
         }
@@ -152,13 +167,13 @@ apis.forEach((IPFS) => {
 
       it('throws an error if the object being passed is invalid', async () => {
         try {
-          await Entry.toMultihash(ipfs, { hash: 'deadbeef' })
+          await Entry.toMultihash(ipfs, testACL, testIdentity, { hash: 'deadbeef' })
         } catch(e) {
           assert.equal(e.message, 'Invalid object format, cannot generate entry multihash')
         }
 
         try {
-          const entry = await Entry.create(ipfs, null, 'A', 'hello')
+          const entry = await Entry.create(ipfs, testACL, testIdentity, 'A', 'hello')
           delete entry.clock
           await Entry.toMultihash(ipfs, entry)
         } catch(e) {

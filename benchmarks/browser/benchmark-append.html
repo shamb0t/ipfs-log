@@ -19,6 +19,7 @@
     <script type="text/javascript" src="../../node_modules/ipfs/dist/index.min.js" charset="utf-8"></script>
 
     <script type="text/javascript">
+      // @FIXME Fix browser benchmarks before merging!
       let log, ipfs
 
       // Metrics
@@ -39,7 +40,7 @@
       }
 
       let run = (() => {
-        ipfs = new Ipfs({ 
+        ipfs = new Ipfs({
           repo: './ipfs-log/examples/browser/benchmark-append/0.27.0',
           start: false,
           EXPERIMENTAL: {

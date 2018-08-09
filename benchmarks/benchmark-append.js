@@ -6,6 +6,8 @@ const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const MemStore = require('../test/utils/mem-store')
 
+const { ACL, Identity } = Log
+
 // State
 let ipfs
 let log
@@ -53,8 +55,22 @@ let run = (() => {
     // ipfs.object.put = memstore.put.bind(memstore)
     // ipfs.object.get = memstore.get.bind(memstore)
 
-    // Create a log
-    log = new Log(ipfs, 'A')
+    const keystore = Keystore.create('./test-keys')
+    const key = keystore.createKey('benchmark-append-signed')
+    const identity = new Identity(
+      key.getPublic('hex'),
+      data => keystore.sign(key, data),
+      async (sig, entryKey, data) =>  {
+        const pubKey = await keystore.importPublicKey(entryKey)
+        return keystore.verify(sig, pubKey, data)
+      }
+    )
+    const acl = new ACL(async (entry, identity) => {
+      const pubKey = (identity && identity.publicKey) || entry.key
+      return pubKey === key.getPublic('hex')
+    })
+
+    log = new Log(ipfs, 'A', null, null, null, acl, identity)
 
     // Output metrics at 1 second interval
     setInterval(() => {
