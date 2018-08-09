@@ -6,10 +6,9 @@ const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Keystore = require('orbit-db-keystore')
 const Log = require('../src/log')
-const { getTestACL, getTestIdentity } = require('./utils/test-entry-validator')
+const { getTestACL, getTestIdentity } = require('./utils/test-entry-identity')
 
 const apis = [require('ipfs')]
-
 const dataDir = './ipfs/tests/log'
 
 const repoConf = {
@@ -52,7 +51,6 @@ apis.forEach((IPFS) => {
       id2 = getTestIdentity(key2.getPublic('hex'))
 
       ipfs = new IPFS(ipfsConf)
-      ipfs.keystore = keystore
       ipfs.on('error', done)
       ipfs.on('ready', () => done())
     })
@@ -75,33 +73,14 @@ apis.forEach((IPFS) => {
       assert.equal(log.values[0].key, key1.getPublic('hex'))
     })
 
-    it('doesn\'t sign entries when key is not defined', async () => {
-      const log = new Log(ipfs, 'A')
-      await log.append('one')
-      assert.equal(log.values[0].sig, null)
-      assert.equal(log.values[0].key, null)
-    })
-
-    it('allows only the owner to write when write-access keys are defined', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, key1, [key1.getPublic('hex')])
-      const log2 = new Log(ipfs, 'B', null, null, null, key2)
-
+    it('doesn\'t sign entries when ACL is not defined', async () => {
       let err
       try {
-        await log1.append('one')
-        await log2.append('two')
-        await log1.join(log2)
+        const log = new Log(ipfs)
       } catch (e) {
         err = e.toString()
       }
       assert.equal(err, 'Error: ACL is required')
-
-      try {
-        const log = new Log(ipfs, 'A', null, null, null, acl1)
-      } catch (e) {
-        err = e.toString()
-      }
-      assert.equal(err, 'Error: Identity is required')
     })
 
     it('doesn\'t join logs with different IDs ', async () => {
@@ -124,30 +103,6 @@ apis.forEach((IPFS) => {
       assert.equal(log1.values[0].payload, 'one')
     })
 
-    it('doesn\'t allows the owner to write if write-keys defines non-owner key', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, key1, [key2.getPublic('hex')])
-
-      let err
-      try {
-        await log1.append('one')
-      } catch (e) {
-        err = e.toString()
-      }
-      assert.equal(err, 'Error: Not allowed to write')
-    })
-
-    it('allows nobody to write when write-access keys are not defined', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, key1, [])
-
-      let err
-      try {
-        await log1.append('one')
-      } catch (e) {
-        err = e.toString()
-      }
-      assert.equal(err.toString(), 'Error: Not allowed to write')
-    })
-
     it('throws an error if log is signed but trying to merge with an entry that doesn\'t have public signing key', async () => {
       const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
       const log2 = new Log(ipfs, 'A', null, null, null, acl2, id2)
@@ -161,7 +116,7 @@ apis.forEach((IPFS) => {
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, 'Error: Entry doesn\'t have a public key')
+      assert.equal(err, 'Error: A key is required to check for permission')
     })
 
     it('throws an error if log is signed but trying to merge an entry that doesn\'t have a signature', async () => {
@@ -181,13 +136,18 @@ apis.forEach((IPFS) => {
     })
 
     it('throws an error if log is signed but the signature doesn\'t verify', async () => {
-
       const replaceAt = (str, index, replacement) => {
         return str.substr(0, index) + replacement+ str.substr(index + replacement.length)
       }
+      const canAppend = key => Promise.resolve(key === key1.getPublic('hex') || key === key2.getPublic('hex'))
+      acl1 = getTestACL(key1.getPublic('hex'), canAppend)
+      id1 = getTestIdentity(key1.getPublic('hex'))
+
+      acl2 = getTestACL(key2.getPublic('hex'), canAppend)
+      id2 = getTestIdentity(key2.getPublic('hex'))
 
       const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
-      const log2 = new Log(ipfs, 'A', null, null, null, acl2, id2)
+      const log2 = new Log(ipfs, 'A', null, null, null, acl1, id2)
       let err
 
       try {
@@ -198,24 +158,20 @@ apis.forEach((IPFS) => {
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, `Error: Could not validate signature: '${log2.values[0].sig}' for key '${log2.values[0].key}'`)
+
+      const entry = log2.values[0]
+      assert.equal(err, `Error: Could not validate signature "${entry.sig}" for entry "${entry.hash}" and key "${entry.key}"`)
       assert.equal(log1.values.length, 1)
       assert.equal(log1.values[0].payload, 'one')
     })
 
     it('throws an error if entry doesn\'t have append access', async () => {
-      // This should be done at the orbit-db level, this is part of orbit ACL
-      // It simulates a scenario where "key2" is not allowed to append to the log
-      const canAppend = entry => {
-        if (entry.key !== key1.getPublic('hex')) throw new Error('Not allowed to write')
-      }
-
+      const canAppend = key => Promise.resolve(key === key1.getPublic('hex'))
       acl1 = getTestACL(key1.getPublic('hex'), canAppend)
       id1 = getTestIdentity(key1.getPublic('hex'))
 
       acl2 = getTestACL(key2.getPublic('hex'), canAppend)
       id2 = getTestIdentity(key2.getPublic('hex'))
-
 
       const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
       const log2 = new Log(ipfs, 'A', null, null, null, acl2, id2)
@@ -228,7 +184,8 @@ apis.forEach((IPFS) => {
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, 'Error: Not allowed to write')
+
+      assert.equal(err, `Error: Could not append entry, key "${id2.id}" is not allowed to write to the log`)
     })
   })
 })

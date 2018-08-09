@@ -6,7 +6,7 @@ const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Log = require('../src/log')
 const EntryIO = require('../src/entry-io')
-const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-validator')
+const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-identity')
 
 const apis = [require('ipfs')]
 

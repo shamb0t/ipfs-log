@@ -7,7 +7,7 @@ const DatastoreLevel = require('datastore-level')
 const config = require('./config/ipfs-daemon.config')
 const Log = require('../src/log.js')
 const MemStore = require('./utils/mem-store')
-const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-validator')
+const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-identity')
 
 const apis = [require('ipfs')]
 

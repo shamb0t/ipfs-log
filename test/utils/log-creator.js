@@ -2,7 +2,9 @@
 
 const Entry = require('../../src/entry')
 const Log = require('../../src/log.js')
-const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./test-entry-validator')
+const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./test-entry-identity')
+
+const getTestEntryValidator = require('./test-entry-identity')
 
 class LogCreator {
   static async createLog1 (ipfs) {

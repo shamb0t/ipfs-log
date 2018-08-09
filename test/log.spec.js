@@ -4,8 +4,7 @@ const assert = require('assert')
 const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
-// const MemStore = require('./utils/mem-store')
-const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-validator')
+const { defaultJoinPermissionCheckingFn, getTestACL, getTestIdentity } = require('./utils/test-entry-identity')
 const LogCreator = require('./utils/log-creator')
 const bigLogString = require('./fixtures/big-log.fixture.js')
 const Log = require('../src/log')
@@ -111,9 +110,9 @@ apis.forEach((IPFS) => {
       })
 
       it('sets items if given as params', async () => {
-        const one = await Entry.create(ipfs, acl, identity, 'A', 'entryA', [], new Clock('A', 0))
-        const two = await Entry.create(ipfs, acl, identity, 'A', 'entryB', [], new Clock('B', 0))
-        const three = await Entry.create(ipfs, acl, identity, 'A', 'entryC', [], new Clock('C', 0))
+        const one = await Entry.createAndPublish('A', 'entryA', [], new Clock('A', 0), null, identity, ipfs)
+        const two = await Entry.createAndPublish('A', 'entryB', [], new Clock('B', 0), null, identity, ipfs)
+        const three = await Entry.createAndPublish('A', 'entryC', [], new Clock('C', 0), null, identity, ipfs)
         const log = new Log(ipfs, 'A', [one, two, three], null, null, acl, identity)
         assert.equal(log.length, 3)
         assert.equal(log.values[0].payload, 'entryA')
@@ -122,18 +121,18 @@ apis.forEach((IPFS) => {
       })
 
       it('sets heads if given as params', async () => {
-        const one = await Entry.create(ipfs, acl, identity, 'A', 'entryA')
-        const two = await Entry.create(ipfs, acl, identity, 'B', 'entryB')
-        const three = await Entry.create(ipfs, acl, identity, 'C', 'entryC')
+        const one = await Entry.createAndPublish('A', 'entryA', [], null, null, identity, ipfs)
+        const two = await Entry.createAndPublish('A', 'entryB', [], null, null, identity, ipfs)
+        const three = await Entry.createAndPublish('A', 'entryC', [], null, null, identity, ipfs)
         const log = new Log(ipfs, 'B', [one, two, three], [three], null, acl, identity)
         assert.equal(log.heads.length, 1)
         assert.equal(log.heads[0].hash, three.hash)
       })
 
       it('finds heads if heads not given as params', async () => {
-        const one = await Entry.create(ipfs, acl, identity, 'A', 'entryA')
-        const two = await Entry.create(ipfs, acl, identity, 'B', 'entryB')
-        const three = await Entry.create(ipfs, acl, identity, 'C', 'entryC')
+        const one = await Entry.createAndPublish('A', 'entryA', [], null, null, identity, ipfs)
+        const two = await Entry.createAndPublish('A', 'entryB', [], null, null, identity, ipfs)
+        const three = await Entry.createAndPublish('A', 'entryC', [], null, null, identity, ipfs)
         const log = new Log(ipfs, 'A', [one, two, three], null, null, acl, identity)
         assert.equal(log.heads.length, 3)
         assert.equal(log.heads[0].hash, one.hash)
@@ -506,7 +505,7 @@ apis.forEach((IPFS) => {
 
           try {
             const hash = await log.toMultihash()
-            const res = await Log.fromMultihash(ipfs, hash, -1, [], acl, identity, callback)
+            const res = await Log.fromMultihash(ipfs, hash, -1, [], acl1, id1, callback)
           } catch (e) {
             throw e
           }
@@ -630,9 +629,9 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, joinACL1, joinID1, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, joinACL2, joinID2, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, joinACL3, joinID3, 'X', 'entryC' + i, [prev3, n1, n2])
+          const n1 = await Entry.createAndPublish('X', 'entryA' + i, [prev1], null, null, joinID1, ipfs)
+          const n2 = await Entry.createAndPublish('X', 'entryB' + i, [prev2, n1], null, null, joinID2, ipfs)
+          const n3 = await Entry.createAndPublish('X', 'entryC' + i, [prev3, n1, n2], null, null, joinID3, ipfs)
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
@@ -1024,7 +1023,7 @@ apis.forEach((IPFS) => {
         const amount = 100
         for(let i = 1; i <= amount; i ++) {
           const prev1 = last(items1)
-          const n1 = await Entry.create(ipfs, acl1, id1, 'A', 'entryA' + i, [prev1])
+          const n1 = await Entry.createAndPublish('A', 'entryA' + i, [prev1], null, null, id1, ipfs)
           items1.push(n1)
         }
 
@@ -1056,9 +1055,9 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, log1._acl, log1._identity, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, log2._acl, log2._identity, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, log3._acl, log3._identity, 'X', 'entryC' + i, [prev3, n2])
+          const n1 = await Entry.createAndPublish('X', 'entryA' + i, [prev1], null, null, log1._identity, ipfs)
+          const n2 = await Entry.createAndPublish('X', 'entryB' + i, [prev2, n1], null, null, log2._identity, ipfs)
+          const n3 = await Entry.createAndPublish('X', 'entryC' + i, [prev3, n1, n2], null, null, log3._identity, ipfs)
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
@@ -1079,7 +1078,7 @@ apis.forEach((IPFS) => {
         const amount = 5
         for(let i = 1; i <= amount; i ++) {
           const prev1 = last(items1)
-          const n1 = await Entry.create(ipfs, acl, identity, 'A', 'entryA' + i, [prev1])
+          const n1 = await Entry.createAndPublish('A', 'entryA' + i, [prev1], null, null, identity, ipfs)
           items1.push(n1)
         }
 
@@ -1114,9 +1113,9 @@ apis.forEach((IPFS) => {
             const prev1 = last(items1)
             const prev2 = last(items2)
             const prev3 = last(items3)
-            const n1 = await Entry.create(ipfs, log1._acl, log1._identity, log1.id, 'entryA' + i, [prev1], log1.clock)
-            const n2 = await Entry.create(ipfs, log2._acl, log2._identity, log2.id, 'entryB' + i, [prev2, n1], log2.clock)
-            const n3 = await Entry.create(ipfs, log3._acl, log3._identity, log3.id, 'entryC' + i, [prev3, n2], log3.clock)
+            const n1 = await Entry.createAndPublish(log1.id, 'entryA' + i, [prev1], log1.clock, null, log1._identity, ipfs)
+            const n2 = await Entry.createAndPublish(log2.id, 'entryB' + i, [prev2, n1], log2.clock, null, log2._identity, ipfs)
+            const n3 = await Entry.createAndPublish(log3.id, 'entryC' + i, [prev3, n1, n2], log3.clock, null, log3._identity, ipfs)
             log1.clock.tick()
             log2.clock.tick()
             log3.clock.tick()
@@ -1163,9 +1162,9 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, log1._acl, log1._identity, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, log2._acl, log2._identity, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, log3._acl, log3._identity, 'X', 'entryC' + i, [prev3, n2])
+          const n1 = await Entry.createAndPublish('X', 'entryA' + i, [prev1], null, null, log1._identity, ipfs)
+          const n2 = await Entry.createAndPublish('X', 'entryB' + i, [prev2, n1], null, null, log2._identity, ipfs)
+          const n3 = await Entry.createAndPublish('X', 'entryC' + i, [prev3, n2], null, null, log3._identity, ipfs)
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
@@ -1193,9 +1192,9 @@ apis.forEach((IPFS) => {
           const prev1 = last(items1)
           const prev2 = last(items2)
           const prev3 = last(items3)
-          const n1 = await Entry.create(ipfs, log1._acl, log1._identity, 'X', 'entryA' + i, [prev1])
-          const n2 = await Entry.create(ipfs, log2._acl, log2._identity, 'X', 'entryB' + i, [prev2, n1])
-          const n3 = await Entry.create(ipfs, log3._acl, log3._identity, 'X', 'entryC' + i, [prev3, n1, n2])
+          const n1 = await Entry.createAndPublish('X', 'entryA' + i, [prev1], null, null, log1._identity, ipfs)
+          const n2 = await Entry.createAndPublish('X', 'entryB' + i, [prev2, n1], null, null, log2._identity, ipfs)
+          const n3 = await Entry.createAndPublish('X', 'entryC' + i, [prev3, n1, n2], null, null, log3._identity, ipfs)
           items1.push(n1)
           items2.push(n2)
           items3.push(n3)
@@ -1226,9 +1225,9 @@ apis.forEach((IPFS) => {
           log1.clock.tick()
           log2.clock.tick()
           log3.clock.tick()
-          const n1 = await Entry.create(ipfs, log1._acl, log1._identity, 'X', 'entryA' + i, [prev1], log1.clock)
-          const n2 = await Entry.create(ipfs, log2._acl, log2._identity, 'X', 'entryB' + i, [prev2, n1], log2.clock)
-          const n3 = await Entry.create(ipfs, log3._acl, log3._identity, 'X', 'entryC' + i, [prev3, n1, n2], log3.clock)
+          const n1 = await Entry.createAndPublish('X', 'entryA' + i, [prev1], log1.clock, null, log1._identity, ipfs)
+          const n2 = await Entry.createAndPublish('X', 'entryB' + i, [prev2, n1], log2.clock, null, log2._identity, ipfs)
+          const n3 = await Entry.createAndPublish('X', 'entryC' + i, [prev3, n1, n2], log3.clock, null, log3._identity, ipfs)
           log1.clock.merge(log2.clock)
           log1.clock.merge(log3.clock)
           log2.clock.merge(log1.clock)
