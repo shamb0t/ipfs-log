@@ -36,15 +36,11 @@ const uniqueEntriesReducer = (res, acc) => {
 class Log extends GSet {
   /**
    * Create a new Log instance
-   * @param  {IPFS}           ipfs            An IPFS instance
+   * @param  {IPFS}           [ipfs]            An IPFS instance
    * @param  {String}         [id]            ID of the log
    * @param  {Array<Entry>}   [entries]       An Array of Entries from which to create the log from
    * @param  {Array<Entry>}   [heads]         Set the heads of the log
    * @param  {Clock}          [clock]         Set the clock of the log
-   * be joined. The arguments will be the entry to verify and a reference
-   * to the log itself and the verification function should return true
-   * if the entry is valid and false if it is not. Logs containing entries
-   * marked as invalid by this function will not be joined
    * @param {Object}          [acl]           ACL following an interface that
    * provides functions for checking permissions
    * @param {Object}          [identity]      Identity following an interface
