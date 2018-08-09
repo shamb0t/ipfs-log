@@ -1,12 +1,13 @@
 'use strict'
 
 const Log = require('../src/log')
+const Keystore = require('orbit-db-keystore')
 const IPFS = require('ipfs')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const MemStore = require('../test/utils/mem-store')
 
-const { ACL, Identity } = Log
+const { ACL, Identity, IdentityProvider } = Log
 
 // State
 let ipfs
@@ -57,18 +58,19 @@ let run = (() => {
 
     const keystore = Keystore.create('./test-keys')
     const key = keystore.createKey('benchmark-append-signed')
-    const identity = new Identity(
-      key.getPublic('hex'),
+    const provider = new IdentityProvider(
       data => keystore.sign(key, data),
       async (sig, entryKey, data) =>  {
         const pubKey = await keystore.importPublicKey(entryKey)
         return keystore.verify(sig, pubKey, data)
       }
     )
-    const acl = new ACL(async (entry, identity) => {
-      const pubKey = (identity && identity.publicKey) || entry.key
-      return pubKey === key.getPublic('hex')
-    })
+    const acl = new ACL((pubKey, entry) => Promise.resolve(pubKey === key.getPublic('hex')))
+    const identity = new Identity(
+      key.getPublic('hex'),
+      key.getPublic('hex'),
+      provider
+    )
 
     log = new Log(ipfs, 'A', null, null, null, acl, identity)
 

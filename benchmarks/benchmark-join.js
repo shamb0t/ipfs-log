@@ -1,12 +1,13 @@
 'use strict'
 
 const Log = require('../src/log')
+const Keystore = require('orbit-db-keystore')
 const IPFS = require('ipfs')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const MemStore = require('../test/utils/mem-store')
 
-const { ACL, Identity } = Log
+const { ACL, Identity, IdentityProvider } = Log
 
 // State
 let ipfs
@@ -20,12 +21,13 @@ let lastTenSeconds = 0
 
 const queryLoop = async () => {
   try {
-    const add1 = await log1.append('a' + totalQueries)
-    const add2 = await log2.append('b' + totalQueries)
+    await Promise.all([
+      log1.append('a' + totalQueries),
+      log2.append('b' + totalQueries)
+    ])
 
-    await Promise.all([add1, add2])
-    log1.join(log2)
-    log2.join(log1)
+    await log1.join(log2)
+    await log2.join(log1)
     totalQueries++
     lastTenSeconds++
     queriesPerSecond++
@@ -66,18 +68,19 @@ let run = (() => {
 
     const keystore = Keystore.create('./test-keys')
     const key = keystore.createKey('benchmark-append-signed')
-    const identity = new Identity(
-      key.getPublic('hex'),
+    const provider = new IdentityProvider(
       data => keystore.sign(key, data),
       async (sig, entryKey, data) =>  {
         const pubKey = await keystore.importPublicKey(entryKey)
         return keystore.verify(sig, pubKey, data)
       }
     )
-    const acl = new ACL(async (entry, identity) => {
-      const pubKey = (identity && identity.publicKey) || entry.key
-      return pubKey === key.getPublic('hex')
-    })
+    const acl = new ACL((pubKey, entry) => Promise.resolve(pubKey === key.getPublic('hex')))
+    const identity = new Identity(
+      key.getPublic('hex'),
+      key.getPublic('hex'),
+      provider
+    )
 
     log1 = new Log(ipfs, 'A', null, null, null, acl, identity)
     log2 = new Log(ipfs, 'B', null, null, null, acl, identity)

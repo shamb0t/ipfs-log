@@ -8,8 +8,24 @@
     <h2>Description</h2>
     <div>Add an entry to two logs and join them after each update. Measure throughput in operations per second.</div>
     <pre><i>
-    let log1 = new Log(ipfs, 'A')
-    let log2 = new Log(ipfs, 'B')
+    const keystore = Keystore.create('./browser-benchmark-join-test-keys')
+    const key = keystore.createKey('browser-benchmark-join-signed')
+    const provider = new IdentityProvider(
+      data => keystore.sign(key, data),
+      async (sig, entryKey, data) =>  {
+        const pubKey = await keystore.importPublicKey(entryKey)
+        return keystore.verify(sig, pubKey, data)
+      }
+    )
+    const acl = new ACL((pubKey, entry) => Promise.resolve(pubKey === key.getPublic('hex')))
+    const identity = new Identity(
+      key.getPublic('hex'),
+      key.getPublic('hex'),
+      provider
+    )
+
+    log1 = new Log(ipfs, 'browser-benchmark-join-signed-A', null, null, null, acl, identity)
+    log2 = new Log(ipfs, 'browser-benchmark-join-signed-B', null, null, null, acl, identity)
 
     const add1 = await log1.append("a" + loopCount)
     const add2 = await log2.append("b" + loopCount)
@@ -24,6 +40,7 @@
     <h2>Results</h2>
     <pre id="output"></pre>
 
+    <script type="text/javascript" src="keystore.min.js" charset="utf-8"></script>
     <script type="text/javascript" src="../../dist/ipfslog.min.js" charset="utf-8"></script>
     <script type="text/javascript" src="../../node_modules/ipfs/dist/index.min.js" charset="utf-8"></script>
 
@@ -83,8 +100,24 @@
             queriesPerSecond = 0
           }, 1000)
 
-          log1 = new Log(ipfs, 'A')
-          log2 = new Log(ipfs, 'B')
+          const keystore = Keystore.create('./browser-benchmark-join-test-keys')
+          const key = keystore.createKey('browser-benchmark-join-signed')
+          const provider = new IdentityProvider(
+            data => keystore.sign(key, data),
+            async (sig, entryKey, data) =>  {
+              const pubKey = await keystore.importPublicKey(entryKey)
+              return keystore.verify(sig, pubKey, data)
+            }
+          )
+          const acl = new ACL((pubKey, entry) => Promise.resolve(pubKey === key.getPublic('hex')))
+          const identity = new Identity(
+            key.getPublic('hex'),
+            key.getPublic('hex'),
+            provider
+          )
+
+          log1 = new Log(ipfs, 'browser-benchmark-join-signed-A', null, null, null, acl, identity)
+          log2 = new Log(ipfs, 'browser-benchmark-join-signed-B', null, null, null, acl, identity)
           queryLoop()
         })
 
