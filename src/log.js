@@ -36,20 +36,26 @@ const uniqueEntriesReducer = (res, acc) => {
 class Log extends GSet {
   /**
    * Create a new Log instance
-   * @param  {IPFS}           [ipfs]            An IPFS instance
-   * @param  {String}         [id]            ID of the log
-   * @param  {Array<Entry>}   [entries]       An Array of Entries from which to create the log from
+   * @param  {IPFS}           [ipfs]          An IPFS instance
+   * @param  {Object}         [acl]           ACL following an interface that provides functions for checking permissions
+   * @param  {Object}         [identity]      Identity following an interface that provides functions for verifying entries signature and signing entries
+   * @param  {String}         [logId]            ID of the log
+   * @param  {Array<Entry>}   [entries]       An Array of Entries from which to create the log
    * @param  {Array<Entry>}   [heads]         Set the heads of the log
    * @param  {Clock}          [clock]         Set the clock of the log
-   * @param {Object}          [acl]           ACL following an interface that
-   * provides functions for checking permissions
-   * @param {Object}          [identity]      Identity following an interface
-   * that provides functions for verifying entries signature and signing entries
    * @return {Log}                            Log
    */
-  constructor (ipfs, id, entries, heads, clock, acl, identity) {
+  constructor (ipfs, acl, identity, logId, entries, heads, clock) {
     if (!isDefined(ipfs)) {
       throw LogError.ImmutableDBNotDefinedError()
+    }
+
+    if (!isDefined(acl)) {
+      throw new Error('ACL is required')
+    }
+
+    if (!isDefined(identity)) {
+      throw new Error('Identity is required')
     }
 
     if (isDefined(entries) && !Array.isArray(entries)) {
@@ -71,7 +77,7 @@ class Log extends GSet {
     super()
 
     this._storage = ipfs
-    this._id = id || randomId()
+    this._id = logId || randomId()
 
     // ACL
     this._acl = acl
@@ -98,8 +104,8 @@ class Log extends GSet {
     // Take the given key as the clock id is it's a Key instance,
     // otherwise if key was given, take whatever it is,
     // and if it was null, take the given id as the clock id
-    const clockId = this._identity ? this._identity.id : this._id
-    this._clock = new Clock(clockId, maxTime)
+    // const clockId = this._identity ? this._identity.publicKey : this._id
+    this._clock = new Clock(this._identity.publicKey, maxTime)
   }
 
   /**
@@ -223,14 +229,13 @@ class Log extends GSet {
 
     // @TODO: Split Entry.create into creating object, checking permission, signing and then posting to IPFS
     // Create the entry and add it to the internal cache
-    const entry = await Entry.createAndPublish(
+    const entry = await Entry.create(
+      this._storage,
+      this._identity,
       this.id,
       data,
       nexts,
-      this.clock,
-      this._identity.id,
-      this._identity,
-      this._storage
+      this.clock
     )
 
     const canAppend = await this._acl.canAppend(this._identity.id, entry)
@@ -278,7 +283,7 @@ class Log extends GSet {
 
     // Verify signature for each entry and throws if there's an invalid signature
     const verify = async (entry) => {
-      const isValid = await Entry.verify(this._identity, entry)
+      const isValid = await Entry.verify(this._identity.provider, entry)
       if (!isValid) throw new Error(`Could not validate signature "${entry.sig}" for entry "${entry.hash}" and key "${entry.key}"`)
     }
 
@@ -397,14 +402,14 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromMultihash (ipfs, hash, length = -1, exclude, acl, identity, onProgressCallback) {
+  static fromMultihash (ipfs, acl, identity, hash, length = -1, exclude, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error(`Invalid hash: ${hash}`)
 
     // TODO: need to verify the entries with 'key'
     // TODO: Change these to use await
     return LogIO.fromMultihash(ipfs, hash, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, data.heads, data.clock, acl, identity))
+      .then((data) => new Log(ipfs, acl, identity, data.id, data.values, data.heads, data.clock))
   }
 
   /**
@@ -415,13 +420,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromEntryHash (ipfs, hash, id, length = -1, exclude, acl, identity, onProgressCallback) {
+  static fromEntryHash (ipfs, acl, identity, hash, id, length = -1, exclude, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error("'hash' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntryHash(ipfs, hash, id, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, id, data.values, null, null, acl, identity))
+      .then((data) => new Log(ipfs, acl, identity, id, data.values))
   }
 
   /**
@@ -449,13 +454,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}       New Log
    */
-  static fromEntry (ipfs, sourceEntries, length = -1, exclude, acl, identity, onProgressCallback) {
+  static fromEntry (ipfs, acl, identity, sourceEntries, length = -1, exclude, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(sourceEntries)) throw new Error("'sourceEntries' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntry(ipfs, sourceEntries, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, acl, identity))
+      .then((data) => new Log(ipfs, acl, identity, data.id, data.values))
   }
 
   /**

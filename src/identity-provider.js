@@ -1,36 +1,41 @@
-
-const isFunction = require('./utils/is-function')
+'use strict'
+const Identity = require('./identity')
+const isDefined = require('./utils/is-defined')
 
 class IdentityProvider {
-  constructor (sign, verify) {
-    if (!isFunction(sign)) {
+  constructor (keystore) {
+    if (!isDefined(keystore)) {
       throw new Error('Signing function is invalid')
     }
-
-    if (!isFunction(verify)) {
-      throw new Error('Signature verification function is invalid')
-    }
-
-    this._sign = sign
-    this._verify = verify
+    this._keystore = keystore
   }
 
-  async sign (data) {
-    try {
-      return this._sign(data)
-    } catch(error) {
-      console.error(error)
-      throw new Error('Could not sign entry')
-    }
+  async createIdentity(id, signingFunction) {
+    const key = this._keystore.hasKey(id)
+      ? await this._keystore.getKey(id)
+      : await this._keystore.createKey(id)
+
+    const publicKey = key.getPublic('hex')
+    const signature = await signingFunction(publicKey)
+
+    return new Identity(id, publicKey, signature, this)
   }
 
-  async verify (signature, key, data) {
-    try {
-      return this._verify(signature, key, data)
-    } catch (error) {
-      console.error(error)
-      throw new Error('Could not validate signature')
-    }
+  static async verifyIdentity (identity, verifierFunction) {
+    return verifierFunction(identity.publicKey, identity.signature) === identity.id
+  }
+
+  async sign (identity, data) {
+    if (!this._keystore.hasKey(identity.id))
+      throw new Error(`Private signing key not found from Keystore`)
+
+    const signingKey = await this._keystore.getKey(identity.id)
+    const signature = await this._keystore.sign(signingKey, data)
+    return signature
+  }
+
+  async verify (signature, publicKey, data) {
+    return this._keystore.verify(signature, publicKey, data)
   }
 }
 

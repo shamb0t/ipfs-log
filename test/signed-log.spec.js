@@ -4,9 +4,12 @@ const assert = require('assert')
 const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
-const Keystore = require('orbit-db-keystore')
 const Log = require('../src/log')
-const { getTestACL, getTestIdentity } = require('./utils/test-entry-identity')
+const Keystore = require('orbit-db-keystore')
+const Identity = require('../src/identity')
+const IdentityProvider = require('../src/identity-provider')
+const AccessController = require('../src/acl')
+const startIpfs = require('./utils/start-ipfs')
 
 const apis = [require('ipfs')]
 const dataDir = './ipfs/tests/log'
@@ -26,7 +29,7 @@ const ipfsConf = {
   },
 }
 
-let ipfs, key1, key2, key3, id1, acl1, id2, acl2
+let ipfs, etstACL, testIdentity, testIdentity2, testIdentity3
 
 const last = (arr) => {
   return arr[arr.length - 1]
@@ -36,41 +39,37 @@ apis.forEach((IPFS) => {
   describe('Signed Log', function() {
     this.timeout(10000)
 
-    const keystore = Keystore.create('./test/fixtures/keystore')
+    const testKeysPath = './test/fixtures/keys'
+    const keystore = Keystore.create(testKeysPath)
+    const identitySignerFn = (key, data) => keystore.sign(key, data)
+    const identityProvider = new IdentityProvider(keystore)
+    const testACL = new AccessController()
 
-    before((done) => {
+    before( async () => {
       rmrf.sync(dataDir)
-      key1 = keystore.getKey('A')
-      key2 = keystore.getKey('B')
-      key3 = keystore.getKey('C')
-
-      acl1 = getTestACL(key1.getPublic('hex'))
-      id1 = getTestIdentity(key1.getPublic('hex'))
-
-      acl2 = getTestACL(key2.getPublic('hex'))
-      id2 = getTestIdentity(key2.getPublic('hex'))
-
-      ipfs = new IPFS(ipfsConf)
-      ipfs.on('error', done)
-      ipfs.on('ready', () => done())
+      testIdentity = await identityProvider.createIdentity('userA', identitySignerFn)
+      testIdentity2 = await identityProvider.createIdentity('userB', identitySignerFn)
+      testIdentity3 = await identityProvider.createIdentity('userC', identitySignerFn)
+      ipfs = await startIpfs(IPFS, ipfsConf)
     })
 
     after(async () => {
       if (ipfs)
         await ipfs.stop()
+      rmrf.sync(dataDir)
     })
 
     it('creates a signed log', () => {
-      const log = new Log(ipfs, 'A', null, null, null, acl1, id1)
+      const log = new Log(ipfs, testACL, testIdentity, 'A')
       assert.notEqual(log.id, null)
-      assert.equal(log._identity.id, key1.getPublic('hex'))
+      assert.equal(log._identity.id, testIdentity.id)
     })
 
     it('entries contain a signature and a public signing key', async () => {
-      const log = new Log(ipfs, 'A', null, null, null, acl1, id1)
+      const log = new Log(ipfs, testACL, testIdentity, 'A')
       await log.append('one')
       assert.notEqual(log.values[0].sig, null)
-      assert.equal(log.values[0].key, key1.getPublic('hex'))
+      assert.deepEqual(log.values[0].key, testIdentity.toJSON())
     })
 
     it('doesn\'t sign entries when ACL is not defined', async () => {
@@ -84,8 +83,8 @@ apis.forEach((IPFS) => {
     })
 
     it('doesn\'t join logs with different IDs ', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
-      const log2 = new Log(ipfs, 'B', null, null, null, acl2, id2)
+      const log1 = new Log(ipfs, testACL, testIdentity, 'A')
+      const log2 = new Log(ipfs, testACL, testIdentity2, 'B')
 
       let err
       try {
@@ -104,8 +103,8 @@ apis.forEach((IPFS) => {
     })
 
     it('throws an error if log is signed but trying to merge with an entry that doesn\'t have public signing key', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
-      const log2 = new Log(ipfs, 'A', null, null, null, acl2, id2)
+      const log1 = new Log(ipfs, testACL, testIdentity, 'A')
+      const log2 = new Log(ipfs, testACL, testIdentity2, 'A')
 
       let err
       try {
@@ -116,12 +115,12 @@ apis.forEach((IPFS) => {
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, 'Error: A key is required to check for permission')
+      assert.equal(err, 'Error: Entry doesn\'t have a key')
     })
 
     it('throws an error if log is signed but trying to merge an entry that doesn\'t have a signature', async () => {
-      const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
-      const log2 = new Log(ipfs, 'A', null, null, null, acl2, id2)
+      const log1 = new Log(ipfs, testACL, testIdentity, 'A')
+      const log2 = new Log(ipfs, testACL, testIdentity2, 'A')
 
       let err
       try {
@@ -139,15 +138,9 @@ apis.forEach((IPFS) => {
       const replaceAt = (str, index, replacement) => {
         return str.substr(0, index) + replacement+ str.substr(index + replacement.length)
       }
-      const canAppend = key => Promise.resolve(key === key1.getPublic('hex') || key === key2.getPublic('hex'))
-      acl1 = getTestACL(key1.getPublic('hex'), canAppend)
-      id1 = getTestIdentity(key1.getPublic('hex'))
 
-      acl2 = getTestACL(key2.getPublic('hex'), canAppend)
-      id2 = getTestIdentity(key2.getPublic('hex'))
-
-      const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
-      const log2 = new Log(ipfs, 'A', null, null, null, acl1, id2)
+      const log1 = new Log(ipfs, testACL, testIdentity, 'A')
+      const log2 = new Log(ipfs, testACL, testIdentity2, 'A')
       let err
 
       try {
@@ -166,15 +159,9 @@ apis.forEach((IPFS) => {
     })
 
     it('throws an error if entry doesn\'t have append access', async () => {
-      const canAppend = key => Promise.resolve(key === key1.getPublic('hex'))
-      acl1 = getTestACL(key1.getPublic('hex'), canAppend)
-      id1 = getTestIdentity(key1.getPublic('hex'))
-
-      acl2 = getTestACL(key2.getPublic('hex'), canAppend)
-      id2 = getTestIdentity(key2.getPublic('hex'))
-
-      const log1 = new Log(ipfs, 'A', null, null, null, acl1, id1)
-      const log2 = new Log(ipfs, 'A', null, null, null, acl2, id2)
+      const testACL2 = { canAppend: () => false }
+      const log1 = new Log(ipfs, testACL, testIdentity, 'A')
+      const log2 = new Log(ipfs, testACL2, testIdentity2, 'A')
 
       let err
       try {
@@ -185,7 +172,7 @@ apis.forEach((IPFS) => {
         err = e.toString()
       }
 
-      assert.equal(err, `Error: Could not append entry, key "${id2.id}" is not allowed to write to the log`)
+      assert.equal(err, `Error: Could not append entry, key "${testIdentity2.id}" is not allowed to write to the log`)
     })
   })
 })
