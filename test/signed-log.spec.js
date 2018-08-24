@@ -29,7 +29,7 @@ const ipfsConf = {
   },
 }
 
-let ipfs, etstACL, testIdentity, testIdentity2, testIdentity3
+let ipfs, testACL, testIdentity, testIdentity2, testIdentity3
 
 const last = (arr) => {
   return arr[arr.length - 1]

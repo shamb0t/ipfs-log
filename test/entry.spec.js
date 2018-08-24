@@ -58,7 +58,7 @@ apis.forEach((IPFS) =>  {
 
     describe('create', () => {
       it('creates a an empty entry', async () => {
-        const expectedHash = 'QmNdebtHcNi8tcYQbGoEThrMKMpENJVgzaLZnWShisfPDx'
+        const expectedHash = 'QmfF1feScqMfYZgkewxjfAm547EtMvpNuqsbtxzZr3NFbd'
         const entry = await Entry.create(ipfs, testIdentity, 'A', 'hello')
         assert.equal(entry.hash, expectedHash)
         assert.equal(entry.id, 'A')
@@ -70,7 +70,7 @@ apis.forEach((IPFS) =>  {
       })
 
       it('creates a entry with payload', async () => {
-        const expectedHash = 'QmTAiwuukKbR43MwfbYjEgSyHvJjBwZgPFtVPUonqd1fWF'
+        const expectedHash = 'QmYmvKKKctsgrG1kF65N9NfrJzv71VasCToKjVC9sFgQ93'
         const payload = 'hello world'
         const entry = await Entry.create(ipfs, testIdentity, 'A', payload, [])
         assert.equal(entry.payload, payload)
@@ -83,7 +83,7 @@ apis.forEach((IPFS) =>  {
       })
 
       it('creates a entry with payload and next', async () => {
-        const expectedHash = 'QmZvhTF3cAPA4tpju2eMedDxX3uNcQUCmozW5ebABrhxky'
+        const expectedHash = 'QmdrCvFe6dn6zzQ4e9gz2Vr2SNh4JYqgJ8wuqtvcfKXbDU'
         const payload1 = 'hello world'
         const payload2 = 'hello again'
         const entry1 = await Entry.create(ipfs, testIdentity, 'A', payload1, [])
@@ -157,7 +157,7 @@ apis.forEach((IPFS) =>  {
 
     describe('toMultihash', () => {
       it('returns an ipfs hash', async () => {
-        const expectedHash = 'QmNdebtHcNi8tcYQbGoEThrMKMpENJVgzaLZnWShisfPDx'
+        const expectedHash = 'QmfF1feScqMfYZgkewxjfAm547EtMvpNuqsbtxzZr3NFbd'
         const entry = await Entry.create(ipfs, testIdentity, 'A', 'hello', [])
         const hash = await Entry.toMultihash(ipfs, entry)
         assert.equal(entry.hash, expectedHash)
@@ -191,7 +191,7 @@ apis.forEach((IPFS) =>  {
 
     describe('fromMultihash', () => {
       it('creates a entry from ipfs hash', async () => {
-        const expectedHash = 'QmcyVb3N7QSfqtuPzjemd1yopJt2VnTATNPTdWJRJNqsry'
+        const expectedHash = 'QmVvQnJUqtzuRSfbaiM4JEfrYQqmov91SGzB19BKQozW6x'
         const payload1 = 'hello world'
         const payload2 = 'hello again'
         const entry1 = await Entry.create(ipfs, testIdentity, 'A', payload1, [])

@@ -3,7 +3,7 @@
 const isDefined = require('./utils/is-defined')
 
 class Identity {
-  constructor (id, publicKey, signature, provider) {
+  constructor (id, publicKey, pkSignature, signature, provider) {
     if (!isDefined(id)) {
       throw new Error('Identity id is required')
     }
@@ -22,6 +22,7 @@ class Identity {
 
     this._id = id
     this._publicKey = publicKey
+    this._pkSignature = pkSignature
     this._signature = signature
     this._provider = provider
   }
@@ -38,18 +39,23 @@ class Identity {
     return this._publicKey
   }
 
-  get provider() {
-    return this._provider
+  get pkSignature() {
+    return this._pkSignature
   }
 
-  get siganture() {
-    return this._siganture
+  get signature() {
+    return this._signature
+  }
+
+  get provider() {
+    return this._provider
   }
 
   toJSON () {
     return {
       id: this._id,
       publicKey: this._publicKey,
+      pkSignature: this._pkSignature,
       signature: this._signature
     }
   }

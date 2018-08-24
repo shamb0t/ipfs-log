@@ -107,11 +107,7 @@ apis.forEach((IPFS) => {
       let buffer1 = []
       let buffer2 = []
       let processing = 0
-    //
-    //   const permissionCheckingFn = defaultJoinPermissionCheckingFn(['peerA', 'peerB'])
-    //   const [idA, aclA] = [getTestIdentity('peerA'), getTestACL('peerA', permissionCheckingFn)]
-    //   const [idB, aclB] = [getTestIdentity('peerB'), getTestACL('peerB', permissionCheckingFn)]
-    //
+
       const handleMessage = async (message) => {
         if (id1 === message.from)
           return

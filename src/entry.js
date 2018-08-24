@@ -51,8 +51,8 @@ class Entry {
    * @return {Promise}      Returns a promise that resolves to a boolean value
    * indicating if the entry signature is valid
    */
-  static async verify (provider, entry) {
-    if (!provider) throw new Error("Provider is required, cannot verify entry")
+  static async verify (identityProvider, entry) {
+    if (!identityProvider) throw new Error("Identity-provider is required, cannot verify entry")
     if (!Entry.isEntry(entry)) throw new Error("Invalid Log entry")
     if (!entry.key) throw new Error("Entry doesn't have a key")
     if (!entry.sig) throw new Error("Entry doesn't have a signature")
@@ -66,7 +66,7 @@ class Entry {
       clock: entry.clock,
     })
 
-    return provider.verify(entry.sig, entry.key.publicKey, encode(e))
+    return identityProvider.verify(entry.sig, entry.key.publicKey, encode(e))
   }
 
   /**
