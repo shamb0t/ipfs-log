@@ -6,9 +6,8 @@ const EntryIO = require('../src/entry-io')
 const IPFS = require('ipfs')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
-
-const { ACL, Identity, IdentityProvider } = Log
-
+const AccessController = require('../src/default-access-controller')
+const IdentityProvider = require('orbit-db-identity-provider')
 // State
 let ipfs
 let log
@@ -45,23 +44,14 @@ let run = (() => {
 
   ipfs.on('ready', async () => {
     // Create a log
-    const keystore = Keystore.create('./test-keys')
-    const key = keystore.createKey('benchmark-from-entry-hash')
-    const provider = new IdentityProvider(
-      data => keystore.sign(key, data),
-      async (sig, entryKey, data) =>  {
-        const pubKey = await keystore.importPublicKey(entryKey)
-        return keystore.verify(sig, pubKey, data)
-      }
-    )
-    const acl = new ACL((pubKey, entry) => Promise.resolve(pubKey === key.getPublic('hex')))
-    const identity = new Identity(
-      key.getPublic('hex'),
-      key.getPublic('hex'),
-      provider
-    )
+    const testKeysPath = './test/fixtures/keys'
+    const keystore = Keystore.create(testKeysPath)
+    const identitySignerFn = (key, data) => keystore.sign(key, data)
+    const identityProvider = new IdentityProvider(keystore)
+    const acl = new AccessController()
+    const identity = await identityProvider.createIdentity('userA', identitySignerFn)
 
-    log = new Log(ipfs, 'A', null, null, null, acl, identity)
+    log = new Log(ipfs, acl, identity, 'A')
 
     const count = parseInt(process.argv[2]) || 50000
     const refCount = 64

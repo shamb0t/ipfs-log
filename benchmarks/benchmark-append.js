@@ -6,8 +6,8 @@ const IPFS = require('ipfs')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const MemStore = require('../test/utils/mem-store')
-
-const { ACL, Identity, IdentityProvider } = Log
+const IdentityProvider = require('orbit-db-identity-provider')
+const AccessController = require('../src/default-access-controller')
 
 // State
 let ipfs
@@ -50,29 +50,19 @@ let run = (() => {
     console.error(err)
   })
 
-  ipfs.on('ready', () => {
+  ipfs.on('ready', async() => {
     // Use memory store to test without disk IO
     // const memstore = new MemStore()
     // ipfs.object.put = memstore.put.bind(memstore)
     // ipfs.object.get = memstore.get.bind(memstore)
+    const testKeysPath = './test/fixtures/keys'
+    const keystore = Keystore.create(testKeysPath)
+    const identitySignerFn = (key, data) => keystore.sign(key, data)
+    const identityProvider = new IdentityProvider(keystore)
+    const acl = new AccessController()
+    const identity = await identityProvider.createIdentity('userA', identitySignerFn)
 
-    const keystore = Keystore.create('./test-keys')
-    const key = keystore.createKey('benchmark-append-signed')
-    const provider = new IdentityProvider(
-      data => keystore.sign(key, data),
-      async (sig, entryKey, data) =>  {
-        const pubKey = await keystore.importPublicKey(entryKey)
-        return keystore.verify(sig, pubKey, data)
-      }
-    )
-    const acl = new ACL((pubKey, entry) => Promise.resolve(pubKey === key.getPublic('hex')))
-    const identity = new Identity(
-      key.getPublic('hex'),
-      key.getPublic('hex'),
-      provider
-    )
-
-    log = new Log(ipfs, 'A', null, null, null, acl, identity)
+    log = new Log(ipfs, acl, identity, 'A')
 
     // Output metrics at 1 second interval
     setInterval(() => {
