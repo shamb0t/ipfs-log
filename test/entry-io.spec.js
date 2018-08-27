@@ -7,9 +7,8 @@ const DatastoreLevel = require('datastore-level')
 const Log = require('../src/log')
 const EntryIO = require('../src/entry-io')
 const Keystore = require('orbit-db-keystore')
-const Identity = require('../src/identity')
-const IdentityProvider = require('../src/identity-provider')
-const AccessController = require('../src/acl')
+const IdentityProvider = require('orbit-db-identity-provider')
+const AccessController = require('../src/default-access-controller')
 const startIpfs = require('./utils/start-ipfs')
 
 const apis = [require('ipfs')]

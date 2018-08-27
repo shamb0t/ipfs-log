@@ -8,9 +8,9 @@ const config = require('./config/ipfs-daemon.config')
 const Log = require('../src/log.js')
 const MemStore = require('./utils/mem-store')
 const Keystore = require('orbit-db-keystore')
-const Identity = require('../src/identity')
-const IdentityProvider = require('../src/identity-provider')
-const AccessController = require('../src/acl')
+// const Identity = require('../src/identity')
+const IdentityProvider = require('orbit-db-identity-provider')
+const AccessController = require('../src/default-access-controller')
 
 const apis = [require('ipfs')]
 

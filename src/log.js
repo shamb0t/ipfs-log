@@ -9,9 +9,8 @@ const Clock = require('./lamport-clock')
 const isDefined = require('./utils/is-defined')
 const isFunction = require('./utils/is-function')
 const _uniques = require('./utils/uniques')
-const ACL = require('./acl')
-const Identity = require('./identity')
-const IdentityProvider = require('./identity-provider')
+const ACL = require('./default-access-controller')
+const IdentityProvider = require('orbit-db-identity-provider')
 
 const randomId = () => new Date().getTime().toString()
 const getHash = e => e.hash

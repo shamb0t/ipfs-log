@@ -11,9 +11,9 @@ const Entry = require('../src/entry')
 const Clock = require('../src/lamport-clock')
 
 const Keystore = require('orbit-db-keystore')
-const Identity = require('../src/identity')
-const IdentityProvider = require('../src/identity-provider')
-const AccessController = require('../src/acl')
+// const Identity = require('../src/identity')
+const IdentityProvider = require('orbit-db-identity-provider')
+const AccessController = require('../src/default-access-controller')
 const startIpfs = require('./utils/start-ipfs')
 const apis = [require('ipfs')]
 
