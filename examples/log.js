@@ -18,7 +18,7 @@ ipfs.on('error', (err) => console.error(err))
 ipfs.on('ready', async () => {
   const keystore = Keystore.create(dataPath + '/keystore')
   const identitySignerFn = (key, data) => keystore.sign(key, data)
-  const acl = new AccessController()
+  const access = new AccessController()
 
   let identityA, identityB, identityC
 
@@ -32,9 +32,9 @@ ipfs.on('ready', async () => {
 
 
   // Create access controllers: allow write for key1 and key2
-  let log1 = new Log(ipfs, acl, identityA, 'A')
-  let log2 = new Log(ipfs, acl, identityB, 'A')
-  let log3 = new Log(ipfs, acl, identityC, 'A')
+  let log1 = new Log(ipfs, access, identityA, 'A')
+  let log2 = new Log(ipfs, access, identityB, 'A')
+  let log3 = new Log(ipfs, access, identityC, 'A')
 
   try {
     await log1.append('one')

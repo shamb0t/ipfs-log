@@ -46,10 +46,10 @@ let run = (() => {
     const testKeysPath = './test/fixtures/keys'
     const keystore = Keystore.create(testKeysPath)
     const identitySignerFn = (key, data) => keystore.sign(key, data)
-    const acl = new AccessController()
+    const access = new AccessController()
     const identity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
 
-    log = new Log(ipfs, acl, identity, 'A')
+    log = new Log(ipfs, access, identity, 'A')
 
     const count = parseInt(process.argv[2]) || 50000
     const refCount = 64
@@ -109,7 +109,7 @@ let run = (() => {
       log._id,
       -1,
       [],
-      log._acl,
+      log._access,
       log._identity,
       onDataUpdated
     )

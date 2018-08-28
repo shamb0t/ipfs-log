@@ -18,12 +18,12 @@ ipfs.on('error', (e) => console.error(e))
 ipfs.on('ready', async () => {
   const keystore = Keystore.create(dataPath + '/keystore')
   const identitySignerFn = (key, data) => keystore.sign(key, data)
-  const acl = new AccessController()
+  const access = new AccessController()
   const identity = await IdentityProvider.createIdentity(keystore, 'exampleUser', identitySignerFn)
   const outputElm = document.getElementById('output')
 
   // When IPFS is ready, add some log entries
-  let log = new Log(ipfs, acl, identity, 'example-log')
+  let log = new Log(ipfs, access, identity, 'example-log')
 
   await log.append('one')
   const values = JSON.stringify(log.values, null, 2)

@@ -36,7 +36,7 @@ class Log extends GSet {
   /**
    * Create a new Log instance
    * @param  {IPFS}           [ipfs]          An IPFS instance
-   * @param  {Object}         [acl]           ACL following an interface that provides functions for checking permissions
+   * @param  {Object}         [access]           ACL following an interface that provides functions for checking permissions
    * @param  {Object}         [identity]      Identity following an interface that provides functions for verifying entries signature and signing entries
    * @param  {String}         [logId]            ID of the log
    * @param  {Array<Entry>}   [entries]       An Array of Entries from which to create the log
@@ -44,12 +44,12 @@ class Log extends GSet {
    * @param  {Clock}          [clock]         Set the clock of the log
    * @return {Log}                            Log
    */
-  constructor (ipfs, acl, identity, logId, entries, heads, clock) {
+  constructor (ipfs, access, identity, logId, entries, heads, clock) {
     if (!isDefined(ipfs)) {
       throw LogError.ImmutableDBNotDefinedError()
     }
 
-    if (!isDefined(acl)) {
+    if (!isDefined(access)) {
       throw new Error('Access controller is required')
     }
 
@@ -65,7 +65,7 @@ class Log extends GSet {
       throw new Error(`'heads' argument must be an array`)
     }
 
-    if (!isDefined(acl)) {
+    if (!isDefined(access)) {
       throw new Error('Access controller is required')
     }
 
@@ -79,7 +79,7 @@ class Log extends GSet {
     this._id = logId || randomId()
 
     // ACL
-    this._acl = acl
+    this._access = access
     // Identity
     this._identity = identity
 
@@ -237,7 +237,7 @@ class Log extends GSet {
       this.clock
     )
 
-    const canAppend = await this._acl.canAppend(entry, this._identity.provider)
+    const canAppend = await this._access.canAppend(entry, this._identity.provider)
     if (!canAppend) {
       throw new Error(`Could not append entry, key "${this._identity.id}" is not allowed to write to the log`)
     }
@@ -277,7 +277,7 @@ class Log extends GSet {
     // Verify if entries are allowed to be added to the log and throws if
     // there's an invalid entry
     const permitted = async (entry) => {
-      const canAppend = await this._acl.canAppend(entry, identityProvider)
+      const canAppend = await this._access.canAppend(entry, identityProvider)
       if (!canAppend) throw new Error("Append not permitted")
     }
 
@@ -403,14 +403,14 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromMultihash (ipfs, acl, identity, hash, length = -1, exclude, onProgressCallback) {
+  static fromMultihash (ipfs, access, identity, hash, length = -1, exclude, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error(`Invalid hash: ${hash}`)
 
     // TODO: need to verify the entries with 'key'
     // TODO: Change these to use await
     return LogIO.fromMultihash(ipfs, hash, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, acl, identity, data.id, data.values, data.heads, data.clock))
+      .then((data) => new Log(ipfs, access, identity, data.id, data.values, data.heads, data.clock))
   }
 
   /**
@@ -421,13 +421,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} onProgressCallback
    * @return {Promise<Log>}      New Log
    */
-  static fromEntryHash (ipfs, acl, identity, hash, id, length = -1, exclude, onProgressCallback) {
+  static fromEntryHash (ipfs, access, identity, hash, id, length = -1, exclude, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(hash)) throw new Error("'hash' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntryHash(ipfs, hash, id, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, acl, identity, id, data.values))
+      .then((data) => new Log(ipfs, access, identity, id, data.values))
   }
 
   /**
@@ -438,12 +438,12 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}      New Log
    */
-  static fromJSON (ipfs, json, length = -1, acl, identity, timeout, onProgressCallback) {
+  static fromJSON (ipfs, json, length = -1, access, identity, timeout, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromJSON(ipfs, json, length, timeout, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, acl, identity))
+      .then((data) => new Log(ipfs, data.id, data.values, null, null, access, identity))
   }
 
   /**
@@ -455,13 +455,13 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}       New Log
    */
-  static fromEntry (ipfs, acl, identity, sourceEntries, length = -1, exclude, onProgressCallback) {
+  static fromEntry (ipfs, access, identity, sourceEntries, length = -1, exclude, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
     if (!isDefined(sourceEntries)) throw new Error("'sourceEntries' must be defined")
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromEntry(ipfs, sourceEntries, length, exclude, onProgressCallback)
-      .then((data) => new Log(ipfs, acl, identity, data.id, data.values))
+      .then((data) => new Log(ipfs, access, identity, data.id, data.values))
   }
 
   /**

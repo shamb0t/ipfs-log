@@ -14,10 +14,10 @@
       const keystore = Keystore.create(testKeysPath)
       const identitySignerFn = (key, data) => keystore.sign(key, data)
       const identityProvider = new IdentityProvider(keystore)
-      const acl = new AccessController()
+      const access = new AccessController()
       const identity = await identityProvider.createIdentity('userA', identitySignerFn)
 
-      log = new Log(ipfs, acl, identity, 'browser-benchmark-append-signed')
+      log = new Log(ipfs, access, identity, 'browser-benchmark-append-signed')
       await log.append(loopCount)
     </i></pre>
 
@@ -82,10 +82,10 @@
           const keystore = Keystore.create(testKeyPath)
           const identityProvider = new IdentityProvider(keystore)
           const identitySignerFn = (key, data) => keystore.sign(key, data)
-          const acl = new AccessController()
+          const access = new AccessController()
           const identity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
 
-          log = new Log(ipfs, acl, identity, 'browser-benchmark-append-signed')
+          log = new Log(ipfs, access, identity, 'browser-benchmark-append-signed')
           queryLoop()
         })
 

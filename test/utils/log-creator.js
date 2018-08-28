@@ -4,13 +4,13 @@ const Entry = require('../../src/entry')
 const Log = require('../../src/log.js')
 
 class LogCreator {
-  static async createLog1 (ipfs, acl, identities) {
+  static async createLog1 (ipfs, access, identities) {
     const create = async () => {
 
-      let logA = new Log(ipfs, acl, identities[0], 'X')
-      let logB = new Log(ipfs, acl, identities[1],  'X')
-      let log3 = new Log(ipfs, acl, identities[2],  'X')
-      let log  = new Log(ipfs, acl, identities[3],  'X')
+      let logA = new Log(ipfs, access, identities[0], 'X')
+      let logB = new Log(ipfs, access, identities[1],  'X')
+      let log3 = new Log(ipfs, access, identities[2],  'X')
+      let log  = new Log(ipfs, access, identities[3],  'X')
 
       for(let i = 1; i <= 5; i ++) {
         await logA.append('entryA' + i)
@@ -41,16 +41,16 @@ class LogCreator {
     return { log: log, expectedData: expectedData }
   }
 
-  static async createLog100_2 (ipfs, acl, identities) {
+  static async createLog100_2 (ipfs, access, identities) {
     const amount = 100
 
     let expectedData = []
 
     const create = async () => {
 
-      let logA = new Log(ipfs, acl, identities[0], 'X')
-      let logB = new Log(ipfs, acl, identities[1], 'X')
-      let log3 = new Log(ipfs, acl, identities[2], 'X')
+      let logA = new Log(ipfs, access, identities[0], 'X')
+      let logB = new Log(ipfs, access, identities[1], 'X')
+      let log3 = new Log(ipfs, access, identities[2], 'X')
       for(let i = 1; i <= amount; i ++) {
         await logA.append('entryA' + i)
         await logB.join(logA)
