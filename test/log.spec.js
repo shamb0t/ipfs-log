@@ -171,7 +171,7 @@ apis.forEach((IPFS) => {
           err = e
         }
         assert.notEqual(err, undefined)
-        assert.equal(err.message, 'ACL is required')
+        assert.equal(err.message, 'Access controller is required')
 
         try {
           const log = new Log(ipfs, testACL)

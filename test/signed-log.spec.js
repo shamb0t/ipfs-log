@@ -72,14 +72,14 @@ apis.forEach((IPFS) => {
       assert.deepEqual(log.values[0].identity, testIdentity.toJSON())
     })
 
-    it('doesn\'t sign entries when ACL is not defined', async () => {
+    it('doesn\'t sign entries when access controller is not defined', async () => {
       let err
       try {
         const log = new Log(ipfs)
       } catch (e) {
         err = e.toString()
       }
-      assert.equal(err, 'Error: ACL is required')
+      assert.equal(err, 'Error: Access controller is required')
     })
 
     it('doesn\'t join logs with different IDs ', async () => {

@@ -50,7 +50,7 @@ class Log extends GSet {
     }
 
     if (!isDefined(acl)) {
-      throw new Error('ACL is required')
+      throw new Error('Access controller is required')
     }
 
     if (!isDefined(identity)) {
