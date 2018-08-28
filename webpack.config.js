@@ -1,15 +1,24 @@
 'use strict'
 
 const path = require('path')
+const Uglify = require('uglifyjs-webpack-plugin')
 
 module.exports = {
-  entry: './src/log-utils.js',
+  entry: './src/log.js',
   output: {
     libraryTarget: 'var',
     library: 'Log',
     filename: './dist/ipfslog.min.js'
   },
-  devtool: 'source-map',
+  target: 'web',
+  devtool: 'sourcemap',
+  node: {
+    console: false,
+    Buffer: true
+  },
+  plugins: [
+    new Uglify(),
+  ],
   resolve: {
     modules: [
       'node_modules',
@@ -23,10 +32,4 @@ module.exports = {
     ],
     moduleExtensions: ['-loader']
   },
-  node: {
-    console: false,
-    Buffer: true
-  },
-  plugins: [],
-  target: 'web'
 }

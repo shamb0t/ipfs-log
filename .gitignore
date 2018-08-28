@@ -1,8 +1,8 @@
 node_modules/
-*sublime*
-npm-debug.log
-examples/browser/bundle.js
-ipfs/
-stats.json
-dist/*.js.map
 coverage/
+ipfs/
+ipfs-log/
+dist/*.js.map
+examples/browser/bundle.js
+test/keystore/
+test-keys/

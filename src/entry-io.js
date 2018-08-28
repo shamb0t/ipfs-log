@@ -4,10 +4,10 @@ const pWhilst = require('p-whilst')
 const pMap = require('p-map')
 const Entry = require('./entry')
 
-class LogLoader {
+class EntryIO {
   // Fetch log graphs in parallel
-  static fetchParallel (ipfs, hashes, length, exclude = [], concurrency) {
-    const fetchOne = (hash) => LogLoader.fetchAll(ipfs, hash, length, exclude)
+  static fetchParallel (ipfs, hashes, length, exclude = [], concurrency, timeout, onProgressCallback) {
+    const fetchOne = (hash) => EntryIO.fetchAll(ipfs, hash, length, exclude, timeout, onProgressCallback)
     const concatArrays = (arr1, arr2) => arr1.concat(arr2)
     const flatten = (arr) => arr.reduce(concatArrays, [])
     return pMap(hashes, fetchOne, { concurrency: Math.max(concurrency || hashes.length, 1) })
@@ -26,7 +26,7 @@ class LogLoader {
    * @param {function(hash, entry, parent, depth)} onProgressCallback
    * @returns {Promise<Array<Entry>>}
    */
-  static fetchAll (ipfs, hashes, amount, exclude = [], timeout = 2000) {
+  static fetchAll (ipfs, hashes, amount, exclude = [], timeout = null, onProgressCallback) {
     let result = []
     let cache = {}
     let loadingQueue = Array.isArray(hashes)
@@ -37,27 +37,31 @@ class LogLoader {
     const addToLoadingQueue = e => loadingQueue.push(e)
 
     // Add entries that we don't need to fetch to the "cache"
+    exclude = exclude && Array.isArray(exclude) ? exclude : []
     var addToExcludeCache = e => cache[e.hash] = e
     exclude.forEach(addToExcludeCache)
 
     const shouldFetchMore = () => {
-      return loadingQueue.length > 0 &&
-        (result.length < amount || amount < 0)
+      return loadingQueue.length > 0
+          && (result.length < amount || amount < 0)
     }
 
     const fetchEntry = () => {
       const hash = loadingQueue.shift()
 
       if (cache[hash]) {
-        const entry = cache[hash]
-        entry.next.forEach(addToLoadingQueue)
         return Promise.resolve()
       }
 
       return new Promise((resolve, reject) => {
-        // Resolve the promise after a timeout in order to
+        // Resolve the promise after a timeout (if given) in order to
         // not get stuck loading a block that is unreachable
-        const timer = setTimeout(resolve, timeout)
+        const timer = timeout 
+        ? setTimeout(() => {
+            console.warn(`Warning: Couldn't fetch entry '${hash}', request timed out (${timeout}ms)`)
+            resolve()
+          } , timeout) 
+        : null
 
         const addToResults = (entry) => {
           clearTimeout(timer)
@@ -65,6 +69,9 @@ class LogLoader {
             entry.next.forEach(addToLoadingQueue)
             result.push(entry)
             cache[hash] = entry
+            if (onProgressCallback) {
+              onProgressCallback(hash, entry, result.length)
+            }
           }
         }
 
@@ -72,12 +79,15 @@ class LogLoader {
         Entry.fromMultihash(ipfs, hash)
           .then(addToResults)
           .then(resolve)
+          .catch(err => {
+            resolve()
+          })
       })
     }
 
     return pWhilst(shouldFetchMore, fetchEntry)
       .then(() => result)
   }
-  }
+}
 
-module.exports = LogLoader
+module.exports = EntryIO

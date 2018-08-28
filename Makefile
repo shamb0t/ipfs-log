@@ -5,7 +5,7 @@ deps:
 
 test: deps
 	npm run test
-	
+
 build: test
 	npm run build
 	@echo "Build success!"
@@ -13,7 +13,9 @@ build: test
 
 clean:
 	rm -rf ipfs/
+	rm -rf ipfs-log-benchmarks/
 	rm -rf node_modules/
-	rm -rf /tmp/ipfs-log-benchmark/
+	rm -rf coverage/
+	rm -rf test/keystore/
 
 .PHONY: test
