@@ -3,7 +3,7 @@
 class AccessController {
   constructor () {}
 
-  async canAppend(identity, entry) {
+  async canAppend(entry, identityProvider) {
     return true
   }
 }

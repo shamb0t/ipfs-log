@@ -237,7 +237,7 @@ class Log extends GSet {
       this.clock
     )
 
-    const canAppend = await this._acl.canAppend(this._identity.id, entry)
+    const canAppend = await this._acl.canAppend(entry, this._identity.provider)
     if (!canAppend) {
       throw new Error(`Could not append entry, key "${this._identity.id}" is not allowed to write to the log`)
     }
@@ -273,17 +273,19 @@ class Log extends GSet {
     // Get the difference of the logs
     const newItems = Log.difference(log, this)
 
+    const identityProvider = this._identity.provider
     // Verify if entries are allowed to be added to the log and throws if
     // there's an invalid entry
     const permitted = async (entry) => {
-      const canAppend = await this._acl.canAppend(entry.key, entry)
+      const canAppend = await this._acl.canAppend(entry, identityProvider)
       if (!canAppend) throw new Error("Append not permitted")
     }
 
     // Verify signature for each entry and throws if there's an invalid signature
     const verify = async (entry) => {
-      const isValid = await Entry.verify(this._identity.provider, entry)
-      if (!isValid) throw new Error(`Could not validate signature "${entry.sig}" for entry "${entry.hash}" and key "${entry.key}"`)
+      const isValid = await Entry.verify(identityProvider, entry)
+      const publicKey = entry.identity ? entry.identity.publicKey : entry.key
+      if (!isValid) throw new Error(`Could not validate signature "${entry.sig}" for entry "${entry.hash}" and key "${publicKey}"`)
     }
 
     const entriesToJoin = Object.values(newItems)

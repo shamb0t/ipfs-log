@@ -69,7 +69,7 @@ apis.forEach((IPFS) => {
       const log = new Log(ipfs, testACL, testIdentity, 'A')
       await log.append('one')
       assert.notEqual(log.values[0].sig, null)
-      assert.deepEqual(log.values[0].key, testIdentity.toJSON())
+      assert.deepEqual(log.values[0].identity, testIdentity.toJSON())
     })
 
     it('doesn\'t sign entries when ACL is not defined', async () => {

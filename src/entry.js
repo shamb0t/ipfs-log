@@ -39,7 +39,8 @@ class Entry {
     }
 
     const signature = await identity.provider.sign(identity, encode(entry))
-    entry.key = identity.toJSON()
+    entry.key = identity.publicKey
+    entry.identity = identity.toJSON()
     entry.sig = signature
     entry.hash = await Entry.toMultihash(ipfs, entry)
     return entry
@@ -66,7 +67,7 @@ class Entry {
       clock: entry.clock,
     })
 
-    return identityProvider.verify(entry.sig, entry.key.publicKey, encode(e))
+    return identityProvider.verify(entry.sig, entry.key, encode(e))
   }
 
   /**
@@ -97,6 +98,7 @@ class Entry {
     }
 
     if (entry.sig) Object.assign(e, { sig: entry.sig })
+    if (entry.identity) Object.assign(e, { identity: entry.identity })
     if (entry.key) Object.assign(e, { key: entry.key })
 
     const data = Buffer.from(JSON.stringify(e))
