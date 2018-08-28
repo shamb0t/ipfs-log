@@ -1,13 +1,12 @@
 'use strict'
 
 const Log = require('../src/log')
-const Keystore = require('orbit-db-keystore')
 const IPFS = require('ipfs')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const MemStore = require('../test/utils/mem-store')
-const AccessController = require('../src/default-access-controller')
-const IdentityProvider = require('orbit-db-identity-provider')
+const { AccessController, IdentityProvider, Keystore } = Log
+
 // State
 let ipfs
 let log1, log2
@@ -68,9 +67,8 @@ let run = (() => {
     const testKeysPath = './test/fixtures/keys'
     const keystore = Keystore.create(testKeysPath)
     const identitySignerFn = (key, data) => keystore.sign(key, data)
-    const identityProvider = new IdentityProvider(keystore)
     const acl = new AccessController()
-    const identity = await identityProvider.createIdentity('userA', identitySignerFn)
+    const identity = await IdentityProvider.createIdentity(keystore, 'userAAA', identitySignerFn)
 
     log1 = new Log(ipfs, acl, identity, 'A')
     log2 = new Log(ipfs, acl, identity, 'B')

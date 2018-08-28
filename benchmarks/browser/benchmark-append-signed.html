@@ -83,7 +83,7 @@
           const identityProvider = new IdentityProvider(keystore)
           const identitySignerFn = (key, data) => keystore.sign(key, data)
           const acl = new AccessController()
-          const identity = await identityProvider.createIdentity('userA', identitySignerFn)
+          const identity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
 
           log = new Log(ipfs, acl, identity, 'browser-benchmark-append-signed')
           queryLoop()
