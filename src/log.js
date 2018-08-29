@@ -438,12 +438,12 @@ class Log extends GSet {
    * @param {Function(hash, entry, parent, depth)} [onProgressCallback]
    * @return {Promise<Log>}      New Log
    */
-  static fromJSON (ipfs, json, length = -1, access, identity, timeout, onProgressCallback) {
+  static fromJSON (ipfs, access, identity, json, length = -1, timeout, onProgressCallback) {
     if (!isDefined(ipfs)) throw LogError.ImmutableDBNotDefinedError()
 
     // TODO: need to verify the entries with 'key'
     return LogIO.fromJSON(ipfs, json, length, timeout, onProgressCallback)
-      .then((data) => new Log(ipfs, data.id, data.values, null, null, access, identity))
+      .then((data) => new Log(ipfs, access, identity, data.id, data.values))
   }
 
   /**
