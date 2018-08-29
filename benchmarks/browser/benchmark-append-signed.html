@@ -8,14 +8,12 @@
     <h2>Description</h2>
     <div>Add an entry to a log. Measure throughput in operations per second.</div>
     <pre><i>
-
-
-      const testKeysPath = './test/fixtures/keys'
-      const keystore = Keystore.create(testKeysPath)
-      const identitySignerFn = (key, data) => keystore.sign(key, data)
+      const testKeyPath = '../test/fixtures/keys'
+      const keystore = Keystore.create(testKeyPath)
       const identityProvider = new IdentityProvider(keystore)
+      const identitySignerFn = (key, data) => keystore.sign(key, data)
       const access = new AccessController()
-      const identity = await identityProvider.createIdentity('userA', identitySignerFn)
+      const identity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
 
       log = new Log(ipfs, access, identity, 'browser-benchmark-append-signed')
       await log.append(loopCount)
@@ -28,7 +26,6 @@
     <script type="text/javascript" src="../../node_modules/ipfs/dist/index.min.js" charset="utf-8"></script>
 
     <script type="text/javascript">
-      // @FIXME Fix browser benchmarks before merging!
       let log, ipfs
 
       // Metrics
