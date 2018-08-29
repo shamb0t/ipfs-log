@@ -6,9 +6,7 @@ const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Log = require('../src/log')
 const EntryIO = require('../src/entry-io')
-const Keystore = require('orbit-db-keystore')
-const IdentityProvider = require('orbit-db-identity-provider')
-const AccessController = require('../src/default-access-controller')
+const { AccessController, IdentityProvider, Keystore } = Log
 const startIpfs = require('./utils/start-ipfs')
 
 const apis = [require('ipfs')]
@@ -39,16 +37,18 @@ apis.forEach((IPFS) => {
     this.timeout(20000)
     const testKeysPath = './test/fixtures/keys'
     const keystore = Keystore.create(testKeysPath)
-    const identitySignerFn = (key, data) => keystore.sign(key, data)
-    const identityProvider = new IdentityProvider(keystore)
+    const identitySignerFn = async (id, data) => {
+      const key = await keystore.getKey(id)
+      return await keystore.sign(key, data)
+    }
     const testACL = new AccessController()
 
     before(async () => {
       rmrf.sync(dataDir)
-      testIdentity = await identityProvider.createIdentity('userA', identitySignerFn)
-      testIdentity2 = await identityProvider.createIdentity('userB', identitySignerFn)
-      testIdentity3 = await identityProvider.createIdentity('userC', identitySignerFn)
-      testIdentity4 = await identityProvider.createIdentity('userD', identitySignerFn)
+      testIdentity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
+      testIdentity2 = await IdentityProvider.createIdentity(keystore, 'userB', identitySignerFn)
+      testIdentity3 = await IdentityProvider.createIdentity(keystore, 'userC', identitySignerFn)
+      testIdentity4 = await IdentityProvider.createIdentity(keystore, 'userD', identitySignerFn)
 
       ipfs = await startIpfs(IPFS, ipfsConf)
     })

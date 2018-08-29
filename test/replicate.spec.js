@@ -7,10 +7,7 @@ const DatastoreLevel = require('datastore-level')
 const config = require('./config/ipfs-daemon.config')
 const Log = require('../src/log.js')
 const MemStore = require('./utils/mem-store')
-const Keystore = require('orbit-db-keystore')
-// const Identity = require('../src/identity')
-const IdentityProvider = require('orbit-db-identity-provider')
-const AccessController = require('../src/default-access-controller')
+const { AccessController, IdentityProvider, Keystore } = Log
 
 const apis = [require('ipfs')]
 
@@ -48,8 +45,10 @@ apis.forEach((IPFS) => {
 
     const testKeysPath = './test/fixtures/keys'
     const keystore = Keystore.create(testKeysPath)
-    const identitySignerFn = (key, data) => keystore.sign(key, data)
-    const identityProvider = new IdentityProvider(keystore)
+    const identitySignerFn = async (id, data) => {
+      const key = await keystore.getKey(id)
+      return await keystore.sign(key, data)
+    }
     const testACL = new AccessController()
 
     before(function (done) {
@@ -82,8 +81,8 @@ apis.forEach((IPFS) => {
                   await ipfs2.swarm.connect(ipfs1._peerInfo.multiaddrs._multiaddrs[0].toString())
                   await ipfs1.swarm.connect(ipfs2._peerInfo.multiaddrs._multiaddrs[0].toString())
 
-                  testIdentity = await identityProvider.createIdentity('userA', identitySignerFn)
-                  testIdentity2 = await identityProvider.createIdentity('userB', identitySignerFn)
+                  testIdentity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
+                  testIdentity2 = await IdentityProvider.createIdentity(keystore, 'userB', identitySignerFn)
 
                   done()
                 })

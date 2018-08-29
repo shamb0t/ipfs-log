@@ -5,10 +5,7 @@ const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Log = require('../src/log')
-const Keystore = require('orbit-db-keystore')
-// const Identity = require('../src/identity')
-const IdentityProvider = require('orbit-db-identity-provider')
-const AccessController = require('../src/default-access-controller')
+const { AccessController, IdentityProvider, Keystore } = Log
 const startIpfs = require('./utils/start-ipfs')
 
 const apis = [require('ipfs')]
@@ -41,15 +38,17 @@ apis.forEach((IPFS) => {
 
     const testKeysPath = './test/fixtures/keys'
     const keystore = Keystore.create(testKeysPath)
-    const identitySignerFn = (key, data) => keystore.sign(key, data)
-    const identityProvider = new IdentityProvider(keystore)
+    const identitySignerFn = async (id, data) => {
+      const key = await keystore.getKey(id)
+      return await keystore.sign(key, data)
+    }
     const testACL = new AccessController()
 
     before( async () => {
       rmrf.sync(dataDir)
-      testIdentity = await identityProvider.createIdentity('userA', identitySignerFn)
-      testIdentity2 = await identityProvider.createIdentity('userB', identitySignerFn)
-      testIdentity3 = await identityProvider.createIdentity('userC', identitySignerFn)
+      testIdentity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
+      testIdentity2 = await IdentityProvider.createIdentity(keystore, 'userB', identitySignerFn)
+      testIdentity3 = await IdentityProvider.createIdentity(keystore, 'userC', identitySignerFn)
       ipfs = await startIpfs(IPFS, ipfsConf)
     })
 
@@ -60,6 +59,27 @@ apis.forEach((IPFS) => {
     })
 
     it('creates a signed log', () => {
+      const log = new Log(ipfs, testACL, testIdentity, 'A')
+      assert.notEqual(log.id, null)
+      assert.equal(log._identity.id, testIdentity.id)
+    })
+
+    it('has the correct identity', () => {
+      const log = new Log(ipfs, testACL, testIdentity, 'A')
+      assert.notEqual(log.id, null)
+      assert.equal(log._identity.id, 'userA')
+      assert.equal(log._identity.publicKey, '042750228c5d81653e5142e6a56d5551231649160f77b25797dc427f8a5b2afd650acca10182f0dfc519dc6d6e5216b9a6612dbfc56e906bdbf34ea373c92b30d7')
+      assert.equal(log._identity.pkSignature, '30440220590c0b1a84d5edabf4238ea924ad06481a47ba7f866d88d5950e89ee53670d04022068896f4d850297051c6b1acd5edb8d9dacc0a8fa3d11f436b79e193d14236a05')
+      assert.equal(log._identity.signature, '304502210083bee84a2ecab7df452e0642b5d6f84ecc1c33927eac26049111bea64dfc0b8102202ef96123734077f171e211f21f632006a7cdce9d5757ea7c4edd4d54eadbe5d4')
+    })
+
+    it('has the correct public key', () => {
+      const log = new Log(ipfs, testACL, testIdentity, 'A')
+      assert.notEqual(log.id, null)
+      assert.equal(log._identity.id, testIdentity.id)
+    })
+
+    it('has the correct pkSignature', () => {
       const log = new Log(ipfs, testACL, testIdentity, 'A')
       assert.notEqual(log.id, null)
       assert.equal(log._identity.id, testIdentity.id)

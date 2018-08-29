@@ -5,10 +5,7 @@ const rmrf = require('rimraf')
 const IPFSRepo = require('ipfs-repo')
 const DatastoreLevel = require('datastore-level')
 const Entry = require('../src/entry')
-const Keystore = require('orbit-db-keystore')
-// const Identity = require('../src/identity')
-const IdentityProvider = require('orbit-db-identity-provider')
-const AccessController = require('../src/default-access-controller')
+const { AccessController, IdentityProvider, Keystore } = require('../src/log')
 const startIpfs = require('./utils/start-ipfs')
 
 const apis = [require('ipfs')]
@@ -39,13 +36,15 @@ apis.forEach((IPFS) =>  {
     const testUserId = 'userA'
     const testKeysPath = './test/fixtures/keys'
     const keystore = Keystore.create(testKeysPath)
-    const identitySignerFn = (key, data) => keystore.sign(key, data)
-    const identityProvider = new IdentityProvider(keystore)
+    const identitySignerFn = async (id, data) => {
+      const key = await keystore.getKey(id)
+      return await keystore.sign(key, data)
+    }
     const testACL = new AccessController()
 
     before( async () => {
       rmrf.sync(dataDir)
-      testIdentity = await identityProvider.createIdentity(testUserId, identitySignerFn)
+      testIdentity = await IdentityProvider.createIdentity(keystore, testUserId, identitySignerFn)
       ipfs = await startIpfs(IPFS, ipfsConf)
     })
 
@@ -58,7 +57,7 @@ apis.forEach((IPFS) =>  {
 
     describe('create', () => {
       it('creates a an empty entry', async () => {
-        const expectedHash = 'Qmb9MFSSXHwjAsg941wNdZfgnukJ7sSzgeGTv7AJFFCtPP'
+        const expectedHash = 'QmVk4R4ePk7PHhpJ9g212iSzgXodw7bKGacMXLkxDavh9X'
         const entry = await Entry.create(ipfs, testIdentity, 'A', 'hello')
         assert.equal(entry.hash, expectedHash)
         assert.equal(entry.id, 'A')
@@ -70,7 +69,7 @@ apis.forEach((IPFS) =>  {
       })
 
       it('creates a entry with payload', async () => {
-        const expectedHash = 'QmRfvKPrFJEEJiK4qGGyLrJBKixbHBEH4rCfEJm2MM5Vp7'
+        const expectedHash = 'QmfMKCbcAdoT2UGfKxBTJE9TX7PJoHx4YvYZ6kBHeS3QFz'
         const payload = 'hello world'
         const entry = await Entry.create(ipfs, testIdentity, 'A', payload, [])
         assert.equal(entry.payload, payload)
@@ -83,7 +82,7 @@ apis.forEach((IPFS) =>  {
       })
 
       it('creates a entry with payload and next', async () => {
-        const expectedHash = 'QmRdVD1p6TQwS5KJi5F3ErYTojRa7C8U7U7m8f7UXobKCm'
+        const expectedHash = 'QmfYg1oL42CrugMPhat3sCZ6DRwFLTuqzgFLqQy4fNgP1g'
         const payload1 = 'hello world'
         const payload2 = 'hello again'
         const entry1 = await Entry.create(ipfs, testIdentity, 'A', payload1, [])
@@ -157,7 +156,7 @@ apis.forEach((IPFS) =>  {
 
     describe('toMultihash', () => {
       it('returns an ipfs hash', async () => {
-        const expectedHash = 'Qmb9MFSSXHwjAsg941wNdZfgnukJ7sSzgeGTv7AJFFCtPP'
+        const expectedHash = 'QmVk4R4ePk7PHhpJ9g212iSzgXodw7bKGacMXLkxDavh9X'
         const entry = await Entry.create(ipfs, testIdentity, 'A', 'hello', [])
         const hash = await Entry.toMultihash(ipfs, entry)
         assert.equal(entry.hash, expectedHash)
@@ -191,7 +190,7 @@ apis.forEach((IPFS) =>  {
 
     describe('fromMultihash', () => {
       it('creates a entry from ipfs hash', async () => {
-        const expectedHash = 'QmcdbAJsoWj5LJkWnooGPEaiMfWKaga8R2iXWwrNwMeMQM'
+        const expectedHash = 'Qmb6jCETr8ARcFHS28BFRXJrdyi1eJEpRenqKGDarrhkvT'
         const payload1 = 'hello world'
         const payload2 = 'hello again'
         const entry1 = await Entry.create(ipfs, testIdentity, 'A', payload1, [])

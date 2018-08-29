@@ -9,12 +9,9 @@ const bigLogString = require('./fixtures/big-log.fixture.js')
 const Log = require('../src/log')
 const Entry = require('../src/entry')
 const Clock = require('../src/lamport-clock')
-
-const Keystore = require('orbit-db-keystore')
-// const Identity = require('../src/identity')
-const IdentityProvider = require('orbit-db-identity-provider')
-const AccessController = require('../src/default-access-controller')
+const { AccessController, IdentityProvider, Keystore } = Log
 const startIpfs = require('./utils/start-ipfs')
+
 const apis = [require('ipfs')]
 
 const dataDir = './ipfs/tests/log'
@@ -44,8 +41,10 @@ apis.forEach((IPFS) => {
 
   const testKeysPath = './test/fixtures/keys'
   const keystore = Keystore.create(testKeysPath)
-  const identitySignerFn = (key, data) => keystore.sign(key, data)
-  const identityProvider = new IdentityProvider(keystore)
+  const identitySignerFn = async (id, data) => {
+    const key = await keystore.getKey(id)
+    return await keystore.sign(key, data)
+  }
   const testACL = new AccessController()
 
   describe('Log', function() {
@@ -53,10 +52,10 @@ apis.forEach((IPFS) => {
 
     before(async () => {
       rmrf.sync(dataDir)
-      testIdentity = await identityProvider.createIdentity('userA', identitySignerFn)
-      testIdentity2 = await identityProvider.createIdentity('userB', identitySignerFn)
-      testIdentity3 = await identityProvider.createIdentity('userC', identitySignerFn)
-      testIdentity4 = await identityProvider.createIdentity('userD', identitySignerFn)
+      testIdentity = await IdentityProvider.createIdentity(keystore, 'userA', identitySignerFn)
+      testIdentity2 = await IdentityProvider.createIdentity(keystore, 'userB', identitySignerFn)
+      testIdentity3 = await IdentityProvider.createIdentity(keystore, 'userC', identitySignerFn)
+      testIdentity4 = await IdentityProvider.createIdentity(keystore, 'userD', identitySignerFn)
 
       ipfs = await startIpfs(IPFS, ipfsConf)
     })
@@ -211,7 +210,7 @@ apis.forEach((IPFS) => {
 
       it('returns an Entry', () => {
         const entry = log.get(log.values[0].hash)
-        assert.deepEqual(entry.hash, 'Qmbn7vCTQtozyxVSk1ePn6ZnYc2cD4yUiLoYyttgpDVPL9')
+        assert.deepEqual(entry.hash, 'QmVRpSH5Tq9zX7HNUHaVsuct69CihanpAptqF9dRmybTcJ')
       })
 
       it('returns undefined when Entry is not in the log', () => {
@@ -225,7 +224,7 @@ apis.forEach((IPFS) => {
 
       before(async () => {
         expectedData = {
-          hash: 'Qmbn7vCTQtozyxVSk1ePn6ZnYc2cD4yUiLoYyttgpDVPL9',
+          hash: 'QmVRpSH5Tq9zX7HNUHaVsuct69CihanpAptqF9dRmybTcJ',
           id: 'AAA',
           payload: 'one',
           next: [],
@@ -260,7 +259,7 @@ apis.forEach((IPFS) => {
       let log//, testIdentity2, testIdentity3, testIdentity4
       const expectedData = {
         id: 'AAA',
-        heads: ['QmaPMJ7XdCQR5rcnRp2xh5DkJx5y6Knk9X8Ax8MNgL5rbi']
+        heads: ['QmPtC2HyWQFgP9zAsuomcC7viJhQLXwoBuk72f1hQoGqgQ']
       }
 
       beforeEach(async () => {
@@ -279,11 +278,11 @@ apis.forEach((IPFS) => {
       describe('toSnapshot', () => {
         const expectedData = {
           id: 'AAA',
-          heads: ['QmaPMJ7XdCQR5rcnRp2xh5DkJx5y6Knk9X8Ax8MNgL5rbi'],
+          heads: ['QmPtC2HyWQFgP9zAsuomcC7viJhQLXwoBuk72f1hQoGqgQ'],
           values: [
-            'Qmbn7vCTQtozyxVSk1ePn6ZnYc2cD4yUiLoYyttgpDVPL9',
-            'QmSBQgH7Wsmd7Jc1bFQ8x9VJbVViNBSmhAG68X1n5pHNha',
-            'QmaPMJ7XdCQR5rcnRp2xh5DkJx5y6Knk9X8Ax8MNgL5rbi',
+            'QmVRpSH5Tq9zX7HNUHaVsuct69CihanpAptqF9dRmybTcJ',
+            'QmVuKMqjch4m6joYMqEM2Qr7WKkFY9jZ3SvQZu3jcSRqck',
+            'QmPtC2HyWQFgP9zAsuomcC7viJhQLXwoBuk72f1hQoGqgQ',
           ]
         }
 
@@ -307,7 +306,7 @@ apis.forEach((IPFS) => {
 
       describe('toMultihash', async () => {
         it('returns the log as ipfs hash', async () => {
-          const expectedHash = 'QmZRJSmi1oKAg3zAzyc4Y9urGvs1t2W1HuJTiuJ3nzVfpm'
+          const expectedHash = 'QmTkwV5BwuEpQNV2TLpvfsodqvkdqqXMWuNkaaAgFTYxkB'
           let log = new Log(ipfs, testACL, testIdentity, 'A')
           await log.append('one')
           const hash = await log.toMultihash()
@@ -317,9 +316,9 @@ apis.forEach((IPFS) => {
         it('log serialized to ipfs contains the correct data', async () => {
           const expectedData = {
             id: 'A',
-            heads: ['QmZvqcjqHMof56YhBxFQ4UqLVMG5HWJvRWunCMmAS9XCSy']
+            heads: ['QmYaoNpasjTXyEdnBezvFCyjuynAygzqveURK95MTCdbwh']
           }
-          const expectedHash = 'QmZRJSmi1oKAg3zAzyc4Y9urGvs1t2W1HuJTiuJ3nzVfpm'
+          const expectedHash = 'QmTkwV5BwuEpQNV2TLpvfsodqvkdqqXMWuNkaaAgFTYxkB'
           let log = new Log(ipfs, testACL, testIdentity, 'A')
           await log.append('one')
           const hash = await log.toMultihash()
@@ -347,7 +346,7 @@ apis.forEach((IPFS) => {
         it('creates a log from ipfs hash - one entry', async () => {
           const expectedData = {
             id: 'X',
-            heads: ['QmZT5KNQAWeEEJyCYpMNbNj8Bog5NdcqiJKEPG2mHhYD1C']
+            heads: ['Qmdw8hTMzVnG4VTYRN61VPcomrDGw244co26Jid7j4WDJ7']
           }
           let log = new Log(ipfs, testACL, testIdentity, 'X')
           await log.append('one')
